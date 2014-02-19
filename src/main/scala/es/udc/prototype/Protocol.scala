@@ -17,6 +17,6 @@ case class PullWork(size : Int)
 //Master -> Manager
 case class Work(tasks : Seq[Task])
 //Manager -> Downloader
-case class Request(url : String, id : String)
+case class Request(url : String, id : String, headers : Map[String,String])
 //Downloader -> Manager -> BaseCrawler
 case class Response(url : String, id : String, headers : Map[String,String], body : String)
