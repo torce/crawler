@@ -3,6 +3,7 @@ package es.udc.prototype
 import akka.actor.{ReceiveTimeout, ActorRef, Actor}
 import collection.mutable.Queue
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
  * User: david
@@ -18,7 +19,7 @@ class Manager(master : ActorRef, downloader : ActorRef, crawler : ActorRef) exte
   case class NextTask(task : Task)
   val taskList = Queue[Task]()
 
-  override def preStart {
+  override def preStart() {
     master ! new PullWork(Manager.BATCH_SIZE)
     context.setReceiveTimeout(Manager.RETRY_TIMEOUT)
   }
@@ -29,7 +30,7 @@ class Manager(master : ActorRef, downloader : ActorRef, crawler : ActorRef) exte
       self ! NextTask(taskList.dequeue())
     case NextTask(task) =>
       //TODO id will be different from url
-      downloader ! new Request(task.id, task.id)
+      downloader ! new Request(task.id, task.id, Map())
       if(taskList.isEmpty)
         master ! new PullWork(Manager.BATCH_SIZE)
       else
