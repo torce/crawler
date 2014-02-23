@@ -1,6 +1,6 @@
 package es.udc.prototype
 
-import akka.actor.Actor
+import akka.actor.{DeadLetter, ActorRef, Actor}
 import scala.collection.mutable.{Map => MMap}
 import es.udc.prototype.Master.TaskStatus.TaskStatus
 
@@ -13,11 +13,11 @@ import es.udc.prototype.Master.TaskStatus.TaskStatus
 object Master {
   object TaskStatus extends Enumeration {
     type TaskStatus = Value
-    val New, Completed = Value
+    val New, InProgress, Completed = Value
   }
 }
 
-class Master extends Actor {
+class Master(listener : ActorRef) extends Actor {
   private val taskStorage : MMap[String,TaskStatus] = MMap()
   import Master.TaskStatus._
   var newTasks : Int = 0
@@ -32,7 +32,8 @@ class Master extends Actor {
         for((task, status) <- taskStorage
             if status == New
             if tasksAdded < newSize) {
-          taskStorage.remove(task)
+          taskStorage.put(task, InProgress)
+          newTasks = newTasks -1
           tasks = new Task(task) +: tasks
           tasksAdded = tasksAdded + 1
         }
@@ -40,13 +41,15 @@ class Master extends Actor {
           sender ! new Work(tasks)
       }
     case Result(task, links) =>
-      if(taskStorage.get(task) == Some(New)) {
+      if(taskStorage.get(task) == Some(InProgress)) {
         taskStorage.put(task, Completed)
         links foreach (link =>
           if(!taskStorage.contains(link)) {
             taskStorage.put(link, New)
             newTasks = newTasks + 1
           })
+        if(newTasks == 0)
+          listener ! Finished
       }
     case NewTasks(links) =>
       links foreach { link =>

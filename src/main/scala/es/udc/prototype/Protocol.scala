@@ -10,6 +10,8 @@ case class Task(id : String)
 
 //? -> Master
 case class NewTasks(links: Seq[String])
+//Master -> ?
+case object Finished
 //BaseCrawler -> Manager -> Master
 case class Result(id : String, links : Seq[String])
 //Manager -> Master

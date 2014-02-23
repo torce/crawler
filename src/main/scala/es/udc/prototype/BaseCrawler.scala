@@ -21,7 +21,7 @@ class BaseCrawler(extractor : Extractor) extends Actor {
       val currentSender = sender
       Future {
         extractor.extractInformation(response)
-        currentSender ! new Result(id, extractor.extractLinks(response))
+        new Result(id, extractor.extractLinks(response))
       } pipeTo currentSender
   }
 }

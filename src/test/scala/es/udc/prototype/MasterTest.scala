@@ -1,7 +1,7 @@
 package es.udc.prototype
 
 import akka.actor.{Props, ActorSystem}
-import akka.testkit.{ImplicitSender, TestKit}
+import akka.testkit.{TestProbe, ImplicitSender, TestKit}
 import org.scalatest.{WordSpecLike, BeforeAndAfterAll, Matchers}
 import com.typesafe.config.ConfigFactory
 
@@ -22,14 +22,14 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
 
   "A Master actor" should {
     "store new tasks" in {
-      val master = system.actorOf(Props[Master])
+      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
       val values = Seq("1","2")
       master ! new NewTasks(values)
       master ! new PullWork(2)
       expectMsgPF(){case Work(tasks) if tasks.toSet.equals(values.map(new Task(_)).toSet) => true}
     }
     "send only the number of tasks requested" in {
-      val master = system.actorOf(Props[Master])
+      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
       val values = Seq("1","2")
       master ! new NewTasks(values)
       master ! new PullWork(1)
@@ -37,12 +37,12 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
                      case Work(Seq(Task("2"))) => Unit}
     }
     "do not send work if there are not tasks to do" in {
-      val master = system.actorOf(Props[Master])
+      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
       master ! PullWork(1)
       expectNoMsg()
     }
     "store links of a new task and set it as completed" in {
-      val master = system.actorOf(Props[Master])
+      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
       val values = Seq("2","3")
       master ! new NewTasks(Seq("1"))
       master ! new Result("1", values)
@@ -55,7 +55,7 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
       }
     }
     "not store links of unknown task" in {
-      val master = system.actorOf(Props[Master])
+      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
       val values = Seq("2","3")
       master ! new NewTasks(Seq("1"))
       master ! new Result("A", values)
