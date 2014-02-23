@@ -5,6 +5,7 @@ import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 /**
  * User: david
@@ -19,8 +20,8 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
 
   val MSG_MAX_DELAY = 100 milliseconds
 
-  override def afterAll {
-    TestKit.shutdownActorSystem(ActorSystem("TestSystem"))
+  override def afterAll() {
+    system.shutdown()
   }
 
   "A Manager actor" should {
@@ -30,10 +31,11 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
       val tasks = Seq(new Task("1"), new Task("2"))
 
       manager ! new Work(tasks)
-      downloader.expectMsgPF() {case Request("1", "1") => Unit
-                                case Request("2", "2") => Unit}
-      downloader.expectMsgPF() {case Request("1", "1") => Unit
-                                case Request("2", "2") => Unit}
+
+      downloader.expectMsgPF() {case Request("1", "1", _) => Unit
+                                case Request("2", "2", _) => Unit}
+      downloader.expectMsgPF() {case Request("1", "1", _) => Unit
+                                case Request("2", "2", _) => Unit}
     }
     "request more work to master when empty" in {
       val master = TestProbe()

@@ -16,8 +16,8 @@ class BaseCrawlerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.lo
   with Matchers
   with BeforeAndAfterAll {
 
-  override def afterAll {
-    TestKit.shutdownActorSystem(ActorSystem("TestSystem"))
+  override def afterAll() {
+    system.shutdown()
   }
 
   "A base Crawler" should {

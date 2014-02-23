@@ -16,8 +16,8 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
   with Matchers
   with BeforeAndAfterAll {
 
-  override def afterAll {
-    TestKit.shutdownActorSystem(ActorSystem("TestSystem"))
+  override def afterAll() {
+    system.shutdown()
   }
 
   "A Master actor" should {
@@ -26,7 +26,7 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
       val values = Seq("1","2")
       master ! new NewTasks(values)
       master ! new PullWork(2)
-      expectMsgPF(){case Work(tasks) => tasks.toSet.equals(values.map(new Task(_)).toSet)}
+      expectMsgPF(){case Work(tasks) if tasks.toSet.equals(values.map(new Task(_)).toSet) => true}
     }
     "send only the number of tasks requested" in {
       val master = system.actorOf(Props[Master])

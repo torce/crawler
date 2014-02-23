@@ -4,8 +4,7 @@ import akka.testkit.{ImplicitSender, TestKit}
 import akka.actor.{Actor, Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
-import spray.testkit.ScalatestRouteTest
-import spray.routing.{SimpleRoutingApp, HttpService}
+import spray.routing.HttpService
 import spray.can.Http
 import akka.io.IO
 import akka.io.Tcp.Bound

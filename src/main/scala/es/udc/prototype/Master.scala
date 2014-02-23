@@ -1,21 +1,25 @@
 package es.udc.prototype
 
 import akka.actor.Actor
-import scala.collection.mutable.Map
-import scala.collection.mutable.Queue
+import scala.collection.mutable.{Map => MMap}
+import es.udc.prototype.Master.TaskStatus.TaskStatus
 
 /**
  * User: david
  * Date: 12/02/14
  * Time: 21:21
  */
-class Master extends Actor {
+
+object Master {
   object TaskStatus extends Enumeration {
     type TaskStatus = Value
     val New, Completed = Value
   }
-  import TaskStatus._
-  private val taskStorage : Map[String,TaskStatus] = Map()
+}
+
+class Master extends Actor {
+  private val taskStorage : MMap[String,TaskStatus] = MMap()
+  import Master.TaskStatus._
   var newTasks : Int = 0
   def receive = {
     case PullWork(size) =>
