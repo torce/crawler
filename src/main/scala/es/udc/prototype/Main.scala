@@ -14,9 +14,14 @@ import org.rogach.scallop.exceptions._
  */
 
 trait Startup {
-  def initMaster(system : ActorSystem) : ActorRef = {
+  class MockExtractor extends Extractor {
+    def extractLinks(response: Response): Seq[String] = Seq()
+    def extractInformation(response: Response): Unit = Unit
+  }
+
+  def initMaster(system : ActorSystem, masterProps : Props = Props[Master]) : ActorRef = {
     system.actorOf(ClusterSingletonManager.props(
-      singletonProps = handOverData => Props[Master],
+      singletonProps = handOverData => masterProps,
       singletonName = "master",
       terminationMessage = PoisonPill,
       role = None),
@@ -24,15 +29,12 @@ trait Startup {
     system.actorOf(Props(classOf[SingletonProxy], "masterManager", "master"))
   }
 
-  def initCrawler(system : ActorSystem) : ActorRef = {
-    system.actorOf(Props(classOf[BaseCrawler], new Extractor {
-      def extractLinks(response: Response): Seq[String] = Seq()
-      def extractInformation(response: Response): Unit = Unit
-    }), "baseCrawler")
+  def initCrawler(system : ActorSystem, crawlerProps : Props = Props(classOf[BaseCrawler], new MockExtractor)) : ActorRef = {
+    system.actorOf(crawlerProps, "baseCrawler")
   }
 
-  def initDownloader(system : ActorSystem) : ActorRef = {
-    system.actorOf(Props[Downloader], "downloader")
+  def initDownloader(system : ActorSystem, downloaderProps : Props = Props[Downloader]) : ActorRef = {
+    system.actorOf(downloaderProps, "downloader")
   }
 
   def initManager(system : ActorSystem, master : ActorRef, downloader : ActorRef, crawler : ActorRef) : ActorRef = {
