@@ -1,6 +1,6 @@
 package es.udc.prototype
 
-import akka.actor.{DeadLetter, ActorRef, Actor}
+import akka.actor.{ActorRef, Actor}
 import scala.collection.mutable.{Map => MMap}
 import es.udc.prototype.Master.TaskStatus.TaskStatus
 
@@ -15,46 +15,71 @@ object Master {
     type TaskStatus = Value
     val New, InProgress, Completed = Value
   }
+
+  def generateId(url: String) = {
+    url
+  }
 }
 
 class Master(listener : ActorRef) extends Actor {
-  private val taskStorage : MMap[String,TaskStatus] = MMap()
+  private val taskStorage: MMap[String, (Task, TaskStatus)] = MMap()
+
   import Master.TaskStatus._
   var newTasks : Int = 0
-  def receive = {
-    case PullWork(size) =>
-      var tasks : Seq[Task] = Seq()
-      var newSize : Int = size
-      if(size > newTasks)
-        newSize = newTasks
-      if(newSize > 0) {
-        var tasksAdded = 0
-        for((task, status) <- taskStorage
-            if status == New
-            if tasksAdded < newSize) {
-          taskStorage.put(task, InProgress)
-          newTasks = newTasks -1
-          tasks = new Task(task) +: tasks
-          tasksAdded = tasksAdded + 1
-        }
-        if(tasks.size > 0)
-          sender ! new Work(tasks)
+  var completedTasks = 0
+
+  def getNewTasks(size: Int): Option[Seq[Task]] = {
+    var newSize = size
+    var tasks = Seq[Task]()
+    if (size > newTasks)
+      newSize = newTasks
+    if (newSize > 0) {
+      var tasksAdded = 0
+      for ((id, (task, status)) <- taskStorage
+           if status == New
+           if tasksAdded < newSize) {
+        taskStorage.put(task.id, (task, InProgress))
+        newTasks -= 1
+        tasks = task +: tasks
+        tasksAdded += 1
       }
+      Some(tasks)
+    } else {
+      None
+    }
+  }
+
+  def storeResult(task: Task, links: Seq[String]): Unit = {
+    if (taskStorage.get(task.id) == Some((task, InProgress))) {
+      taskStorage.put(task.id, (task, Completed))
+      completedTasks += 1
+      addNewTasks(links)
+      if (completedTasks == taskStorage.size)
+        listener ! Finished
+    }
+  }
+
+  def addNewTasks(links: Seq[String]) {
+    links foreach {
+      link =>
+        if (!taskStorage.contains(link)) {
+          val id = Master.generateId(link)
+          taskStorage.put(id, (new Task(id, link), New))
+          newTasks += 1
+        }
+    }
+  }
+
+  def receive = {
     case Result(task, links) =>
-      if(taskStorage.get(task) == Some(InProgress)) {
-        taskStorage.put(task, Completed)
-        links foreach (link =>
-          if(!taskStorage.contains(link)) {
-            taskStorage.put(link, New)
-            newTasks = newTasks + 1
-          })
-        if(newTasks == 0)
-          listener ! Finished
+      storeResult(task, links)
+    case PullWork(size) =>
+      getNewTasks(size) match {
+        case Some(tasks) =>
+          sender ! Work(tasks)
+        case _ =>
       }
     case NewTasks(links) =>
-      links foreach { link =>
-        taskStorage.put(link, New)
-        newTasks = newTasks + 1
-      }
+      addNewTasks(links)
   }
 }

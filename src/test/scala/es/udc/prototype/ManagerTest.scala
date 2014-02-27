@@ -28,20 +28,22 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
     "send work to downloader one by one in any order" in {
       val downloader = TestProbe()
       val manager = system.actorOf(Props(classOf[Manager], TestProbe().ref, downloader.ref, TestProbe().ref))
-      val tasks = Seq(new Task("1"), new Task("2"))
+      val tasks = Set(new Task("id1", "url1"), new Task("id2", "url2"))
 
-      manager ! new Work(tasks)
+      manager ! new Work(tasks.toSeq)
 
-      downloader.expectMsgPF() {case Request("1", "1", _) => Unit
-                                case Request("2", "2", _) => Unit}
-      downloader.expectMsgPF() {case Request("1", "1", _) => Unit
-                                case Request("2", "2", _) => Unit}
+      downloader.expectMsgPF() {
+        case Request(task, _) if tasks.contains(task) => Unit
+      }
+      downloader.expectMsgPF() {
+        case Request(task, _) if tasks.contains(task) => Unit
+      }
     }
     "request more work to master when empty" in {
       val master = TestProbe()
       val manager = system.actorOf(Props(classOf[Manager], master.ref, TestProbe().ref, TestProbe().ref))
 
-      manager ! new Work(Seq(new Task("1")))
+      manager ! new Work(Seq(new Task("id", "url")))
       master.expectMsg(new PullWork(Manager.BATCH_SIZE))
     }
     "retry requests to master after a timeout" in {
@@ -55,16 +57,17 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
     "forward Result messages to master" in {
       val master = TestProbe()
       val manager = system.actorOf(Props(classOf[Manager], master.ref, TestProbe().ref, TestProbe().ref))
-      val msg = new Result("id", Seq("1"))
+      val msg = new Result(new Task("id", "url"), Seq("1"))
 
       manager ! msg
       master.expectMsg(new PullWork(Manager.BATCH_SIZE))
       master.expectMsg(msg)
+      master.sender should be(manager)
     }
     "forward Response messages to crawler" in {
       val crawler = TestProbe()
       val manager = system.actorOf(Props(classOf[Manager], TestProbe().ref, TestProbe().ref, crawler.ref))
-      val msg = new Response("url", "id", Map(), "body")
+      val msg = new Response(new Task("id", "url"), Map(), "body")
 
       manager ! msg
       crawler.expectMsg(msg)

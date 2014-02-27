@@ -10,7 +10,6 @@ import akka.io.IO
 import spray.can.Http
 import akka.io.Tcp.Bound
 import collection.mutable.{Set => MSet}
-import scala.concurrent.duration._
 import scala.language.postfixOps
 
 /**
@@ -66,7 +65,7 @@ class NodeTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("app
 
   class SimpleLinkExtractor extends Extractor {
     override def extractLinks(response : Response): Seq[String] = {
-      visitedPaths add response.url
+      visitedPaths add response.task.url
       (XML.loadString(response.body) \\ "@href").toSeq.map(_.text)
     }
     override def extractInformation(response : Response) = Unit
@@ -84,7 +83,9 @@ class NodeTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("app
       system.actorOf(Props(classOf[Manager], master, downloader, crawler))
       master ! new NewTasks(Seq(makeUrl("/")))
 
-      listener.expectMsgPF(10 seconds) {case Finished => visitedPaths should be (expected)}
+      listener.expectMsgPF() {
+        case Finished => visitedPaths should be(expected)
+      }
     }
   }
 }

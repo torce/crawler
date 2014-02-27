@@ -17,11 +17,11 @@ trait Extractor {
 class BaseCrawler(extractor : Extractor) extends Actor {
   import context.dispatcher
   def receive = {
-    case response @ Response(url, id, headers, body) =>
+    case response@Response(task, headers, body) =>
       val currentSender = sender
       Future {
         extractor.extractInformation(response)
-        new Result(id, extractor.extractLinks(response))
+        new Result(task, extractor.extractLinks(response))
       } pipeTo currentSender
   }
 }

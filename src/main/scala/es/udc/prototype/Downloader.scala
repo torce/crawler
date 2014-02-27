@@ -23,13 +23,13 @@ class Downloader extends Actor {
   implicit val executionContext = context.dispatcher
 
   def receive = {
-    case Request(url, id, headers) =>
+    case Request(task@Task(url, id), headers) =>
       val request = Get(url).withHeaders(headers)
       val pipeline = sendReceive
       val response : Future[Response] = for {
         httpResponse <- pipeline(request)
       } yield {
-        new Response(url, id, httpResponse.headers, httpResponse.entity.asString)
+        new Response(task, httpResponse.headers, httpResponse.entity.asString)
       }
       response pipeTo sender
   }

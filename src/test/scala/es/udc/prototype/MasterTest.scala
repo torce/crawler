@@ -23,18 +23,21 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
   "A Master actor" should {
     "store new tasks" in {
       val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
-      val values = Seq("1","2")
-      master ! new NewTasks(values)
+      val values = Set("1", "2")
+      master ! new NewTasks(values.toSeq)
       master ! new PullWork(2)
-      expectMsgPF(){case Work(tasks) if tasks.toSet.equals(values.map(new Task(_)).toSet) => true}
+      expectMsgPF() {
+        case Work(tasks) if tasks.map(_.url).forall(values.contains) => Unit
+      }
     }
     "send only the number of tasks requested" in {
       val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
       val values = Seq("1","2")
       master ! new NewTasks(values)
       master ! new PullWork(1)
-      expectMsgPF() {case Work(Seq(Task("1"))) => Unit
-                     case Work(Seq(Task("2"))) => Unit}
+      expectMsgPF() {
+        case Work(Seq(Task(_, url))) if values.contains(url) => Unit
+      }
     }
     "do not send work if there are not tasks to do" in {
       val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
@@ -43,24 +46,27 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
     }
     "store links of a new task and set it as completed" in {
       val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
-      val values = Seq("2","3")
+      val values = Set("2", "3")
       master ! new NewTasks(Seq("1"))
-      master ! new Result("1", values)
+      master ! new PullWork(1)
+      expectMsgPF() {
+        case Work(Seq(Task(_, "1"))) => Unit
+      }
+      master ! new Result(new Task(Master.generateId("1"), "1"), values.toSeq)
       master ! new PullWork(2)
-      expectMsgClass(classOf[Work]) match {
-        case Work(tasks) =>
-          tasks.toSet.equals(values.map(new Task(_)).toSet)
-        case _ =>
-          fail()
+      expectMsgPF() {
+        case Work(tasks) if tasks.map(_.url).forall(values.contains) => Unit
       }
     }
     "not store links of unknown task" in {
       val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
       val values = Seq("2","3")
       master ! new NewTasks(Seq("1"))
-      master ! new Result("A", values)
+      master ! new Result(new Task("id", "url"), values)
       master ! new PullWork(2)
-      expectMsg(new Work(Seq(new Task("1"))))
+      expectMsgPF() {
+        case Work(Seq(Task(_, "1"))) => Unit
+      }
       master ! new PullWork(2)
       expectNoMsg()
     }

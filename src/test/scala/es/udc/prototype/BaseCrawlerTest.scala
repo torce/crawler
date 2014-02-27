@@ -23,18 +23,18 @@ class BaseCrawlerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.lo
   "A base Crawler" should {
     "extract information and return a Result with the extracted links" in {
       var informationExtracted : Int = 0
-      val testResponse = new Response("url", "id", Map(), "body")
+      val testResponse = new Response(new Task("id", "url"), Map(), "body")
 
       class MockExtractor extends Extractor {
         def extractLinks(response : Response) = Seq("1", "2")
         def extractInformation(response : Response) {
-          informationExtracted = informationExtracted + 1
+          informationExtracted += 1
         }
       }
 
       val baseCrawler = system.actorOf(Props(classOf[BaseCrawler], new MockExtractor))
       baseCrawler ! testResponse
-      expectMsg(new Result("id", Seq("1", "2")))
+      expectMsg(new Result(new Task("id", "url"), Seq("1", "2")))
       informationExtracted should be(1)
     }
   }

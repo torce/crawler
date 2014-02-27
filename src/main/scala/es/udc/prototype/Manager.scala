@@ -29,8 +29,7 @@ class Manager(master : ActorRef, downloader : ActorRef, crawler : ActorRef) exte
       tasks foreach { taskList.enqueue(_) }
       self ! NextTask(taskList.dequeue())
     case NextTask(task) =>
-      //TODO id will be different from url
-      downloader ! new Request(task.id, task.id, Map())
+      downloader ! new Request(task, Map())
       if(taskList.isEmpty)
         master ! new PullWork(Manager.BATCH_SIZE)
       else

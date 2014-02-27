@@ -6,19 +6,25 @@ package es.udc.prototype
  * Time: 21:09
  */
 //Not a message
-case class Task(id : String)
+case class Task(id: String, url: String)
 
 //? -> Master
 case class NewTasks(links: Seq[String])
+
 //Master -> ?
 case object Finished
+
 //BaseCrawler -> Manager -> Master
-case class Result(id : String, links : Seq[String])
+case class Result(task: Task, links: Seq[String])
+
 //Manager -> Master
-case class PullWork(size : Int)
+case class PullWork(size: Int)
+
 //Master -> Manager
-case class Work(tasks : Seq[Task])
+case class Work(tasks: Seq[Task])
+
 //Manager -> Downloader
-case class Request(url : String, id : String, headers : Map[String,String])
+case class Request(task: Task, headers: Map[String, String])
+
 //Downloader -> Manager -> BaseCrawler
-case class Response(url : String, id : String, headers : Map[String,String], body : String)
+case class Response(task: Task, headers: Map[String, String], body: String)
