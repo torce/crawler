@@ -12,6 +12,8 @@ case class Task(id: String, url: String)
 case class NewTasks(links: Seq[String])
 
 //Master -> ?
+case object Started
+
 case object Finished
 
 //BaseCrawler -> Manager -> Master

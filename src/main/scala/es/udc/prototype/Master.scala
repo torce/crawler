@@ -3,6 +3,7 @@ package es.udc.prototype
 import akka.actor.{ActorRef, Actor}
 import scala.collection.mutable.{Map => MMap}
 import es.udc.prototype.Master.TaskStatus.TaskStatus
+import com.typesafe.config.Config
 
 /**
  * User: david
@@ -21,12 +22,16 @@ object Master {
   }
 }
 
-class Master(listener : ActorRef) extends Actor {
+class Master(config: Config, listener: ActorRef) extends Actor {
   private val taskStorage: MMap[String, (Task, TaskStatus)] = MMap()
 
   import Master.TaskStatus._
   var newTasks : Int = 0
   var completedTasks = 0
+
+  override def preStart() {
+    listener ! Started
+  }
 
   def getNewTasks(size: Int): Option[Seq[Task]] = {
     var newSize = size

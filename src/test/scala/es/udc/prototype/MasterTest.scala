@@ -11,10 +11,12 @@ import com.typesafe.config.ConfigFactory
  * Time: 21:57
  */
 class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("application.test.conf")))
-  with ImplicitSender
-  with WordSpecLike
-  with Matchers
-  with BeforeAndAfterAll {
+with ImplicitSender
+with WordSpecLike
+with Matchers
+with BeforeAndAfterAll {
+
+  val CONFIG = ConfigFactory.load("application.test.conf")
 
   override def afterAll() {
     system.shutdown()
@@ -22,7 +24,7 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
 
   "A Master actor" should {
     "store new tasks" in {
-      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
+      val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
       val values = Set("1", "2")
       master ! new NewTasks(values.toSeq)
       master ! new PullWork(2)
@@ -31,8 +33,8 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
       }
     }
     "send only the number of tasks requested" in {
-      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
-      val values = Seq("1","2")
+      val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
+      val values = Seq("1", "2")
       master ! new NewTasks(values)
       master ! new PullWork(1)
       expectMsgPF() {
@@ -40,12 +42,12 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
       }
     }
     "do not send work if there are not tasks to do" in {
-      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
+      val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
       master ! PullWork(1)
       expectNoMsg()
     }
     "store links of a new task and set it as completed" in {
-      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
+      val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
       val values = Set("2", "3")
       master ! new NewTasks(Seq("1"))
       master ! new PullWork(1)
@@ -59,8 +61,8 @@ class MasterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("a
       }
     }
     "not store links of unknown task" in {
-      val master = system.actorOf(Props(classOf[Master], TestProbe().ref))
-      val values = Seq("2","3")
+      val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
+      val values = Seq("2", "3")
       master ! new NewTasks(Seq("1"))
       master ! new Result(new Task("id", "url"), values)
       master ! new PullWork(2)

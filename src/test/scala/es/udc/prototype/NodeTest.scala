@@ -5,12 +5,13 @@ import akka.actor.{Props, Actor, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{Matchers, BeforeAndAfterAll, WordSpecLike}
 import spray.routing.HttpService
-import scala.xml.XML
 import akka.io.IO
 import spray.can.Http
 import akka.io.Tcp.Bound
 import collection.mutable.{Set => MSet}
 import scala.language.postfixOps
+import scala.concurrent.duration._
+import es.udc.prototype.test.util.SpyLinkExtractor
 
 /**
  * User: david
@@ -46,13 +47,12 @@ class NodeTestServer extends Actor with HttpService {
   def receive = runRoute(route)
 }
 
-class NodeTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("application.test.conf")))
-  with ImplicitSender
-  with WordSpecLike
+class NodeTest extends TestKit(ActorSystem("test-system", ConfigFactory.load("system.test.conf").withFallback(ConfigFactory.load())))
+with ImplicitSender
+with WordSpecLike
   with Matchers
-  with BeforeAndAfterAll {
-
-  val visitedPaths : MSet[String] = MSet()
+with BeforeAndAfterAll
+with Startup {
 
   //Init the test server
   val server = system.actorOf(Props[NodeTestServer])
@@ -63,28 +63,26 @@ class NodeTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("app
     system.shutdown()
   }
 
-  class SimpleLinkExtractor extends Extractor {
-    override def extractLinks(response : Response): Seq[String] = {
-      visitedPaths add response.task.url
-      (XML.loadString(response.body) \\ "@href").toSeq.map(_.text)
-    }
-    override def extractInformation(response : Response) = Unit
-  }
-
   "A Node" should {
     "retrieve task from initial URL and crawl it" in {
       import NodeTestServer.makeUrl
       val expected = Set(makeUrl("/"), makeUrl("/resource"), makeUrl("/stuff"))
       val listener : TestProbe = TestProbe()
 
-      val master = system.actorOf(Props(classOf[Master], listener.ref))
-      val crawler = system.actorOf(Props(classOf[BaseCrawler], new SimpleLinkExtractor))
-      val downloader = system.actorOf(Props[Downloader])
-      system.actorOf(Props(classOf[Manager], master, downloader, crawler))
+      //Loaded also in the constructor, sbt does not execute test if there are constructor arguments
+      val config = ConfigFactory.load("system.test.conf").withFallback(ConfigFactory.load())
+
+      val master = initMaster(config, Some(listener.ref))
+      listener.expectMsg(Started)
+
+      val crawler = initCrawler(config)
+      val downloader = initDownloader(config)
+      initManager(config, master, downloader, crawler)
+
       master ! new NewTasks(Seq(makeUrl("/")))
 
-      listener.expectMsgPF() {
-        case Finished => visitedPaths should be(expected)
+      listener.expectMsgPF(150 seconds) {
+        case Finished => SpyLinkExtractor.visitedPaths should be(expected)
       }
     }
   }

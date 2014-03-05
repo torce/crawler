@@ -1,11 +1,12 @@
 package es.udc.prototype
 
-import akka.actor.{ActorRef, PoisonPill, Props, ActorSystem}
-import com.typesafe.config.ConfigFactory
+import akka.actor._
+import akka.actor.ActorDSL._
+import com.typesafe.config.{Config, ConfigFactory}
 import akka.contrib.pattern.ClusterSingletonManager
 import es.udc.prototype.util.SingletonProxy
 import org.rogach.scallop.{LazyScallopConf, ScallopOption}
-import org.rogach.scallop.exceptions._
+import org.rogach.scallop.exceptions.{ScallopException, Help}
 
 /**
  * User: david
@@ -14,31 +15,44 @@ import org.rogach.scallop.exceptions._
  */
 
 trait Startup {
-  class MockExtractor extends Extractor {
-    def extractLinks(response: Response): Seq[String] = Seq()
-    def extractInformation(response: Response): Unit = Unit
-  }
+  def initMaster(config: Config, listener: Option[ActorRef] = None)(implicit system: ActorSystem): ActorRef = {
+    val listenerRef = listener.getOrElse(actor(new Act {
+      become {
+        case Finished =>
+          println("Crawler finished")
+          system.shutdown()
+      }
+    }))
 
-  def initMaster(system : ActorSystem, masterProps : Props = Props[Master]) : ActorRef = {
+    val masterProps = Props(
+      Class.forName(config.getString("prototype.master.class")), config, listenerRef
+    )
+
     system.actorOf(ClusterSingletonManager.props(
-      singletonProps = handOverData => masterProps,
+      singletonProps = _ => masterProps,
       singletonName = "master",
       terminationMessage = PoisonPill,
       role = None),
-      name = "masterManager")
-    system.actorOf(Props(classOf[SingletonProxy], "masterManager", "master"))
+      name = "master-manager")
+    system.actorOf(Props(classOf[SingletonProxy], "master-manager", "master"))
   }
 
-  def initCrawler(system : ActorSystem, crawlerProps : Props = Props(classOf[BaseCrawler], new MockExtractor)) : ActorRef = {
+  def initCrawler(config: Config)(implicit system: ActorSystem): ActorRef = {
+    val extractor = Class.forName(config.getString("prototype.crawler.extractor.class")).newInstance()
+    val crawlerProps = Props(
+      Class.forName(config.getString("prototype.crawler.class")), extractor
+    )
     system.actorOf(crawlerProps, "baseCrawler")
   }
 
-  def initDownloader(system : ActorSystem, downloaderProps : Props = Props[Downloader]) : ActorRef = {
-    system.actorOf(downloaderProps, "downloader")
+  def initDownloader(config: Config)(implicit system: ActorSystem): ActorRef = {
+    system.actorOf(Props(Class.forName(config.getString("prototype.downloader.class"))), "downloader")
   }
 
-  def initManager(system : ActorSystem, master : ActorRef, downloader : ActorRef, crawler : ActorRef) : ActorRef = {
-    system.actorOf(Props(classOf[Manager], master, downloader, crawler), "manager")
+  def initManager(config: Config, master: ActorRef, downloader: ActorRef, crawler: ActorRef)(implicit system: ActorSystem): ActorRef = {
+    system.actorOf(
+      Props(Class.forName(config.getString("prototype.manager.class")),
+        config, master, downloader, crawler), "manager")
   }
 }
 
@@ -62,11 +76,12 @@ object Main extends Startup {
     }
 
     System.setProperty("akka.remote.netty.tcp.port", Conf.port().toString)
+    val config = ConfigFactory.load()
+    implicit val system = ActorSystem("ClusterSystem", config)
 
-    val system = ActorSystem("ClusterSystem", ConfigFactory.load("application.conf"))
-    val master = initMaster(system)
-    val crawler = initCrawler(system)
-    val downloader = initDownloader(system)
-    val manager =  initManager(system, master, downloader, crawler)
+    val master = initMaster(config)
+    val crawler = initCrawler(config)
+    val downloader = initDownloader(config)
+    val manager = initManager(config, master, downloader, crawler)
   }
 }
