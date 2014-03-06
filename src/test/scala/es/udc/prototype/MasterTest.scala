@@ -23,6 +23,11 @@ with BeforeAndAfterAll {
   }
 
   "A Master actor" should {
+    "send a Started message to listener after start" in {
+      val listener = TestProbe()
+      system.actorOf(Props(classOf[Master], CONFIG, listener.ref))
+      listener.expectMsg(Started)
+    }
     "store new tasks" in {
       val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
       val values = Set("1", "2")
@@ -71,6 +76,20 @@ with BeforeAndAfterAll {
       }
       master ! new PullWork(2)
       expectNoMsg()
+    }
+    "send a Finished message to listener when all the task are done" in {
+      val listener = TestProbe()
+      val master = system.actorOf(Props(classOf[Master], CONFIG, listener.ref))
+      val task = new Task("task", "task")
+
+      listener.expectMsg(Started)
+
+      master ! new NewTasks(Seq(task.url))
+      master ! new PullWork(1)
+      expectMsg(new Work(Seq(task)))
+      master ! new Result(task, Seq())
+
+      listener.expectMsg(Finished)
     }
   }
 }
