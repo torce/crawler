@@ -10,7 +10,7 @@ import scala.collection.immutable
  * Date: 12/02/14
  * Time: 20:37
  */
-class SingletonProxy(managerName : String, singletonName : String) extends Actor with ActorLogging {
+class SingletonProxy(singletonPathSeq: Seq[String]) extends Actor with ActorLogging {
   override def preStart() : Unit =
     Cluster(context.system).subscribe(self, classOf[MemberEvent])
   override def postStop() : Unit =
@@ -28,10 +28,13 @@ class SingletonProxy(managerName : String, singletonName : String) extends Actor
     case MemberRemoved(m, _) => membersByAge -= m
     case other =>
       val currentSender = sender
-      consumer foreach { _.tell(other, currentSender)}
+      val c = consumer
+      c foreach {
+        _.tell(other, currentSender)
+      }
   }
 
   def consumer: Option[ActorSelection] =
     membersByAge.headOption map (m => context.actorSelection(
-      RootActorPath(m.address) /  "user" / managerName / singletonName))
+      RootActorPath(m.address) / "user" / singletonPathSeq))
 }

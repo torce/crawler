@@ -1,6 +1,5 @@
 package singleton
 
-import es.udc.prototype._
 
 /**
  * User: david
@@ -8,7 +7,7 @@ import es.udc.prototype._
  * Time: 16:18
  */
 
-object SingletonMultiJvmMaster extends Startup {
+object SingletonMultiJvmMaster {
   def main(args: Array[String]) {
     /*System.setProperty("akka.remote.netty.tcp.port", "2551")
     val system = ActorSystem("ClusterSystem", ConfigFactory.load())
@@ -19,7 +18,7 @@ object SingletonMultiJvmMaster extends Startup {
   }
 }
 
-object SingletonMultiJvmSeed extends Startup {
+object SingletonMultiJvmSeed {
   def main(args: Array[String]) {
     /*System.setProperty("akka.remote.netty.tcp.port", "2552")
     val system = ActorSystem("ClusterSystem", ConfigFactory.load())

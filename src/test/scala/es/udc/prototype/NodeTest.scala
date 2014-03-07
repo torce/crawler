@@ -1,17 +1,16 @@
 package es.udc.prototype
 
-import akka.testkit.{TestProbe, ImplicitSender, TestKit}
-import akka.actor.{Props, Actor, ActorSystem}
+import akka.testkit.{ImplicitSender, TestKit}
+import akka.actor._
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{Matchers, BeforeAndAfterAll, WordSpecLike}
 import spray.routing.HttpService
 import akka.io.IO
 import spray.can.Http
-import akka.io.Tcp.Bound
-import collection.mutable.{Set => MSet}
 import scala.language.postfixOps
 import scala.concurrent.duration._
 import es.udc.prototype.test.util.SpyLinkExtractor
+import akka.io.Tcp.Bound
 
 /**
  * User: david
@@ -50,9 +49,8 @@ class NodeTestServer extends Actor with HttpService {
 class NodeTest extends TestKit(ActorSystem("test-system", ConfigFactory.load("system.test.conf").withFallback(ConfigFactory.load())))
 with ImplicitSender
 with WordSpecLike
-  with Matchers
-with BeforeAndAfterAll
-with Startup {
+with Matchers
+with BeforeAndAfterAll {
 
   //Init the test server
   val server = system.actorOf(Props[NodeTestServer])
@@ -67,21 +65,17 @@ with Startup {
     "retrieve task from initial URL and crawl it" in {
       import NodeTestServer.makeUrl
       val expected = Set(makeUrl("/"), makeUrl("/resource"), makeUrl("/stuff"))
-      val listener : TestProbe = TestProbe()
 
       //Loaded also in the constructor, sbt does not execute test if there are constructor arguments
       val config = ConfigFactory.load("system.test.conf").withFallback(ConfigFactory.load())
 
-      val master = initMaster(config, Some(listener.ref))
-      listener.expectMsg(Started)
+      system.actorOf(Props(classOf[Manager], config, self), "manager")
 
-      val crawler = initCrawler(config)
-      val downloader = initDownloader(config)
-      initManager(config, master, downloader, crawler)
+      expectMsg(Started)
+      system.actorSelection("/user/manager/master-proxy") ! new NewTasks(Seq(makeUrl("/")))
 
-      master ! new NewTasks(Seq(makeUrl("/")))
 
-      listener.expectMsgPF(150 seconds) {
+      expectMsgPF(150.seconds) {
         case Finished => SpyLinkExtractor.visitedPaths should be(expected)
       }
     }

@@ -1,27 +1,59 @@
 package es.udc.prototype
 
-import akka.actor.{ReceiveTimeout, ActorRef, Actor}
+import akka.actor._
 import collection.mutable.{Queue => MQueue}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import com.typesafe.config.Config
+import akka.contrib.pattern.ClusterSingletonManager
+import es.udc.prototype.util.SingletonProxy
 
 /**
  * User: david
  * Date: 12/02/14
  * Time: 23:18
  */
-class Manager(config: Config, master: ActorRef, downloader: ActorRef, crawler: ActorRef) extends Actor {
+trait StartUp {
+  this: Actor =>
+  def initMaster(config: Config, listener: ActorRef): ActorRef = {
+    val masterProps = Props(Class.forName(config.getString("prototype.master.class")), config, listener)
+    context.actorOf(ClusterSingletonManager.props(
+      singletonProps = _ => masterProps,
+      singletonName = "master",
+      terminationMessage = PoisonPill,
+      role = None),
+      name = "master-manager")
+    context.actorOf(Props(classOf[SingletonProxy], Seq(self.path.name, "master-manager", "master")), "master-proxy")
+  }
+
+  def initDownloader(config: Config): ActorRef = {
+    context.actorOf(Props(Class.forName(config.getString("prototype.downloader.class"))), "downloader")
+  }
+
+  def initCrawler(config: Config): ActorRef = {
+    val extractor = Class.forName(config.getString("prototype.crawler.extractor.class")).newInstance()
+    val crawlerProps = Props(
+      Class.forName(config.getString("prototype.crawler.class")), extractor
+    )
+    context.actorOf(crawlerProps, "crawler")
+  }
+}
+
+class Manager(config: Config, listener: ActorRef) extends Actor with StartUp {
 
   case class NextTask(task : Task)
   val taskList = MQueue[Task]()
 
-  var batchSize: Int = _
+  val batchSize = config.getInt("prototype.manager.batch-size")
+  val retryTimeout = config.getInt("prototype.manager.retry-timeout").milliseconds
+
+  //Child actor references
+  val master = initMaster(config, listener)
+  val downloader = initDownloader(config)
+  val crawler = initCrawler(config)
 
   override def preStart() {
-    //Initialize from config
-    batchSize = config.getInt("prototype.manager.batch-size")
-    context.setReceiveTimeout(config.getInt("prototype.manager.retry-timeout").milliseconds)
+    context.setReceiveTimeout(retryTimeout)
     master ! new PullWork(batchSize)
   }
 

@@ -77,7 +77,7 @@ with BeforeAndAfterAll {
       master ! new PullWork(2)
       expectNoMsg()
     }
-    "send a Finished message to listener when all the task are done" in {
+    "send a Finished message to listener when all the tasks are done" in {
       val listener = TestProbe()
       val master = system.actorOf(Props(classOf[Master], CONFIG, listener.ref))
       val task = new Task("task", "task")
