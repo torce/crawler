@@ -7,6 +7,7 @@ import scala.language.postfixOps
 import com.typesafe.config.Config
 import akka.contrib.pattern.ClusterSingletonManager
 import es.udc.prototype.util.SingletonProxy
+import akka.actor.SupervisorStrategy.Escalate
 
 /**
  * User: david

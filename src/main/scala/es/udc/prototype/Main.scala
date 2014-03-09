@@ -40,7 +40,7 @@ object Main {
     val listener = actor(new Act {
       become {
         case Started =>
-          system.actorSelection("/user/manager/master-proxy") ! NewTasks(Seq(Conf.url.toString()))
+          system.actorSelection("/user/manager/master-proxy") ! NewTasks(Seq(Conf.url().toString))
         case Finished =>
           system.shutdown()
       }
