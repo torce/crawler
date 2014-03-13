@@ -12,6 +12,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-contrib" % "2.2.1",
   "com.typesafe.akka" %% "akka-cluster" % "2.2.3",
   "com.typesafe.akka" %% "akka-testkit" % "2.2.3",
+  "org.ccil.cowan.tagsoup" % "tagsoup" % "1.2",
   "org.scalatest" %% "scalatest" % "2.0" % "test",
   "io.spray" % "spray-routing" % "1.2.0" % "test",
   "io.spray" % "spray-client" % "1.2.0",

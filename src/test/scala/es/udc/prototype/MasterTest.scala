@@ -4,6 +4,7 @@ import akka.actor.{Props, ActorSystem}
 import akka.testkit.{TestProbe, ImplicitSender, TestKit}
 import org.scalatest.{WordSpecLike, BeforeAndAfterAll, Matchers}
 import com.typesafe.config.ConfigFactory
+import spray.http.Uri
 
 /**
  * User: david
@@ -30,7 +31,7 @@ with BeforeAndAfterAll {
     }
     "store new tasks" in {
       val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
-      val values = Set("1", "2")
+      val values = Set(Uri("http://test1.test"), Uri("http://test2.test"))
       master ! new NewTasks(values.toSeq)
       master ! new PullWork(2)
       expectMsgPF() {
@@ -39,7 +40,7 @@ with BeforeAndAfterAll {
     }
     "send only the number of tasks requested" in {
       val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
-      val values = Seq("1", "2")
+      val values = Seq(Uri("http://test1.test"), Uri("http://test2.test"))
       master ! new NewTasks(values)
       master ! new PullWork(1)
       expectMsgPF() {
@@ -53,26 +54,29 @@ with BeforeAndAfterAll {
     }
     "store links of a new task and set it as completed" in {
       val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
-      val values = Set("2", "3")
-      master ! new NewTasks(Seq("1"))
+      val completedTask = Uri("http://test1.test")
+      val childTasks = Set(Uri("http://test2.test"), Uri("http://test3.test"))
+      master ! new NewTasks(Seq(completedTask))
       master ! new PullWork(1)
       expectMsgPF() {
-        case Work(Seq(Task(_, "1"))) => Unit
+        case Work(Seq(Task(_, `completedTask`))) => Unit
       }
-      master ! new Result(new Task(Master.generateId("1"), "1"), values.toSeq)
+      master ! new Result(new Task(Master.generateId(completedTask), completedTask), childTasks.toSeq)
       master ! new PullWork(2)
       expectMsgPF() {
-        case Work(tasks) if tasks.map(_.url).forall(values.contains) => Unit
+        case Work(tasks) if tasks.map(_.url).forall(childTasks.contains) => Unit
       }
     }
     "not store links of unknown task" in {
       val master = system.actorOf(Props(classOf[Master], CONFIG, TestProbe().ref))
-      val values = Seq("2", "3")
-      master ! new NewTasks(Seq("1"))
-      master ! new Result(new Task("id", "url"), values)
+      val unknownTask = Uri("http://unknown.test")
+      val firstTask = Uri("http://task.test")
+      val values = Seq(Uri("http://test2.test"), Uri("http://test3.test"))
+      master ! new NewTasks(Seq(firstTask))
+      master ! new Result(new Task(Master.generateId(unknownTask), unknownTask), values)
       master ! new PullWork(2)
       expectMsgPF() {
-        case Work(Seq(Task(_, "1"))) => Unit
+        case Work(Seq(Task(_, `firstTask`))) => Unit
       }
       master ! new PullWork(2)
       expectNoMsg()

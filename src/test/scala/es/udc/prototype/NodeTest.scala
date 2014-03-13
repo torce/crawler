@@ -8,9 +8,9 @@ import spray.routing.HttpService
 import akka.io.IO
 import spray.can.Http
 import scala.language.postfixOps
-import scala.concurrent.duration._
 import es.udc.prototype.test.util.SpyLinkExtractor
 import akka.io.Tcp.Bound
+import spray.http.Uri
 
 /**
  * User: david
@@ -24,7 +24,8 @@ object NodeTestServer {
   val root = "<html><body><a href=\""+makeUrl("/resource")+"\"></a><a href=\""+makeUrl("/stuff")+"\"></a> </body></html>"
   val resource = "<html><body><p>resource</p></body></html>"
   val stuff = "<html><body><p>stuff</p></body></html>"
-  def makeUrl(path : String) : String = s"http://$host:$port$path"
+
+  def makeUrl(path: String): Uri = Uri(s"http://$host:$port$path")
 }
 
 class NodeTestServer extends Actor with HttpService {
@@ -75,7 +76,7 @@ with BeforeAndAfterAll {
       system.actorSelection("/user/manager/master-proxy") ! new NewTasks(Seq(makeUrl("/")))
 
 
-      expectMsgPF(150.seconds) {
+      expectMsgPF() {
         case Finished => SpyLinkExtractor.visitedPaths should be(expected)
       }
     }

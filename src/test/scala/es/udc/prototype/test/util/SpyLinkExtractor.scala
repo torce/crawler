@@ -1,8 +1,8 @@
 package es.udc.prototype.test.util
 
-import es.udc.prototype.{Response, Extractor}
+import es.udc.prototype.{LinkExtractor, Response}
 import scala.collection.mutable.{Set => MSet}
-import scala.xml.XML
+import spray.http.Uri
 
 /**
  * User: david
@@ -11,14 +11,12 @@ import scala.xml.XML
  */
 
 object SpyLinkExtractor {
-  val visitedPaths: MSet[String] = MSet()
+  val visitedPaths: MSet[Uri] = MSet()
 }
 
-class SpyLinkExtractor extends Extractor {
-  override def extractLinks(response: Response): Seq[String] = {
+class SpyLinkExtractor extends LinkExtractor {
+  override def extractLinks(response: Response): Seq[Uri] = {
     SpyLinkExtractor.visitedPaths add response.task.url
-    (XML.loadString(response.body) \\ "@href").toSeq.map(_.text)
+    super.extractLinks(response)
   }
-
-  override def extractInformation(response: Response): Unit = Unit
 }

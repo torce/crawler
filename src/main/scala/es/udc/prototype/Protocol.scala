@@ -1,15 +1,17 @@
 package es.udc.prototype
 
+import spray.http.Uri
+
 /**
  * User: david
  * Date: 12/02/14
  * Time: 21:09
  */
 //Not a message
-case class Task(id: String, url: String)
+case class Task(id: String, url: Uri)
 
 //? -> Master
-case class NewTasks(links: Seq[String])
+case class NewTasks(links: Seq[Uri])
 
 //Master -> ?
 case object Started
@@ -17,7 +19,7 @@ case object Started
 case object Finished
 
 //BaseCrawler -> Manager -> Master
-case class Result(task: Task, links: Seq[String])
+case class Result(task: Task, links: Seq[Uri])
 
 //Manager -> Master
 case class PullWork(size: Int)

@@ -1,6 +1,8 @@
 package es.udc.prototype
 
 import scala.xml.XML
+import org.ccil.cowan.tagsoup.jaxp.SAXFactoryImpl
+import spray.http.{IllegalUriException, Uri}
 
 /**
  * User: david
@@ -8,9 +10,25 @@ import scala.xml.XML
  * Time: 18:56
  */
 class LinkExtractor extends Extractor {
-  override def extractLinks(response: Response): Seq[String] = {
-    (XML.loadString(response.body) \\ "@href").toSeq.map(_.text)
+  lazy val parser = XML.withSAXParser(new SAXFactoryImpl().newSAXParser())
+
+  override def extractLinks(response: Response) = {
+    val links = (parser.loadString(response.body) \\ "@href").map(_.text)
+    links.flatMap {
+      link: String =>
+        try {
+          if (!link.isEmpty)
+            Some(Uri(link))
+          else
+            None
+        } catch {
+          //Ignore bad URI
+          case _: IllegalUriException => None
+        }
+    }
   }
 
-  override def extractInformation(response: Response) = Unit
+  override def extractInformation(response: Response) = {
+    println(response.body)
+  }
 }

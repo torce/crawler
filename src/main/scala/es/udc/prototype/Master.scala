@@ -4,6 +4,7 @@ import akka.actor.{ActorRef, Actor}
 import scala.collection.mutable.{Map => MMap}
 import es.udc.prototype.Master.TaskStatus.TaskStatus
 import com.typesafe.config.Config
+import spray.http.Uri
 
 /**
  * User: david
@@ -12,13 +13,14 @@ import com.typesafe.config.Config
  */
 
 object Master {
+
   object TaskStatus extends Enumeration {
     type TaskStatus = Value
     val New, InProgress, Completed = Value
   }
 
-  def generateId(url: String) = {
-    url
+  def generateId(url: Uri): String = {
+    url.toString()
   }
 }
 
@@ -26,7 +28,8 @@ class Master(config: Config, listener: ActorRef) extends Actor {
   private val taskStorage: MMap[String, (Task, TaskStatus)] = MMap()
 
   import Master.TaskStatus._
-  var newTasks : Int = 0
+
+  var newTasks: Int = 0
   var completedTasks = 0
 
   override def preStart() {
@@ -54,7 +57,7 @@ class Master(config: Config, listener: ActorRef) extends Actor {
     }
   }
 
-  def storeResult(task: Task, links: Seq[String]): Unit = {
+  def storeResult(task: Task, links: Seq[Uri]): Unit = {
     if (taskStorage.get(task.id) == Some((task, InProgress))) {
       taskStorage.put(task.id, (task, Completed))
       completedTasks += 1
@@ -64,10 +67,10 @@ class Master(config: Config, listener: ActorRef) extends Actor {
     }
   }
 
-  def addNewTasks(links: Seq[String]) {
+  def addNewTasks(links: Seq[Uri]) {
     links foreach {
       link =>
-        if (!taskStorage.contains(link)) {
+        if (!taskStorage.contains(Master.generateId(link))) {
           val id = Master.generateId(link)
           taskStorage.put(id, (new Task(id, link), New))
           newTasks += 1

@@ -8,6 +8,7 @@ import spray.routing.HttpService
 import spray.can.Http
 import akka.io.IO
 import akka.io.Tcp.Bound
+import spray.http.Uri
 
 /**
  * User: david
@@ -39,7 +40,8 @@ class DownloaderTest
 
   val host = "localhost"
   val port = 5555
-  def makeUrl(path : String) = "http://" + host + ":" + port.toString + path
+
+  def makeUrl(path: String) = Uri("http://" + host + ":" + port.toString + path)
 
   //Init the test server
   val server = system.actorOf(Props[TestServer])
@@ -54,9 +56,9 @@ class DownloaderTest
     "return a response from a request" in {
       val downloader = system.actorOf(Props[Downloader])
       val testUrl = makeUrl("/")
-      downloader ! new Request(new Task(testUrl, "id"), Map())
+      downloader ! new Request(new Task("id", testUrl), Map())
       expectMsgPF() {
-        case Response(Task(_, "id"), _, TestServer.root) => Unit
+        case Response(Task("id", _), _, TestServer.root) => Unit
       }
     }
   }

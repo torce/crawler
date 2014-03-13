@@ -14,19 +14,21 @@ import scala.concurrent.Future
  * Time: 19:47
  */
 class Downloader extends Actor {
-  implicit def map2headers(headers : Map[String,String]) : List[HttpHeader] =
-    headers.view.toList.map {h => new RawHeader(h._1, h._2)}
+  implicit def map2headers(headers: Map[String, String]): List[HttpHeader] =
+    headers.view.toList.map {
+      h => new RawHeader(h._1, h._2)
+    }
 
-  implicit def headers2map(headers : List[HttpHeader]) : Map[String,String] =
-    headers.foldLeft(Map[String,String]())((map, h) => map ++ Map(h.name -> h.value))
+  implicit def headers2map(headers: List[HttpHeader]): Map[String, String] =
+    headers.foldLeft(Map[String, String]())((map, h) => map ++ Map(h.name -> h.value))
 
   implicit val executionContext = context.dispatcher
 
   def receive = {
-    case Request(task@Task(url, id), headers) =>
+    case Request(task@Task(_, url), headers) =>
       val request = Get(url).withHeaders(headers)
       val pipeline = sendReceive
-      val response : Future[Response] = for {
+      val response: Future[Response] = for {
         httpResponse <- pipeline(request)
       } yield {
         new Response(task, httpResponse.headers, httpResponse.entity.asString)

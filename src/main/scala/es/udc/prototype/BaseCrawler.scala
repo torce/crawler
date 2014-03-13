@@ -3,6 +3,7 @@ package es.udc.prototype
 import akka.actor.Actor
 import akka.pattern.pipe
 import scala.concurrent.Future
+import spray.http.Uri
 
 /**
  * User: david
@@ -10,7 +11,8 @@ import scala.concurrent.Future
  * Time: 23:25
  */
 trait Extractor {
-  def extractLinks(response : Response) : Seq[String]
+  def extractLinks(response: Response): Seq[Uri]
+
   def extractInformation(response : Response) : Unit
 }
 
