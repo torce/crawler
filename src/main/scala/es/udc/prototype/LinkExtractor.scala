@@ -18,7 +18,7 @@ class LinkExtractor extends Extractor {
       link: String =>
         try {
           if (!link.isEmpty)
-            Some(Uri(link))
+            Some(Uri(link).resolvedAgainst(response.task.url))
           else
             None
         } catch {
@@ -29,6 +29,6 @@ class LinkExtractor extends Extractor {
   }
 
   override def extractInformation(response: Response) = {
-    println(response.body)
+    println(response.task.url)
   }
 }
