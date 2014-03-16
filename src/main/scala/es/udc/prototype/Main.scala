@@ -22,7 +22,8 @@ object Main {
                                                validate = p => p > 0 && p < 65535)
       val url: ScallopOption[String] = opt[String](name = "url",
         descr = "Initial url to crawl",
-        required = true)
+        required = true,
+        validate = u => u.startsWith("http://") && u.endsWith("/"))
     }
 
     Conf.initialize {
