@@ -1,6 +1,6 @@
 package es.udc.prototype
 
-import akka.actor.{ActorRef, Actor}
+import akka.actor.{ActorLogging, ActorRef, Actor}
 import scala.collection.mutable.{Map => MMap}
 import es.udc.prototype.Master.TaskStatus.TaskStatus
 import com.typesafe.config.Config
@@ -24,7 +24,7 @@ object Master {
   }
 }
 
-class Master(config: Config, listener: ActorRef) extends Actor {
+class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging {
   private val taskStorage: MMap[String, (Task, TaskStatus)] = MMap()
 
   import Master.TaskStatus._
@@ -33,6 +33,7 @@ class Master(config: Config, listener: ActorRef) extends Actor {
   var completedTasks = 0
 
   override def preStart() {
+    log.info("Sending Started message to the listener")
     listener ! Started
   }
 
@@ -62,8 +63,10 @@ class Master(config: Config, listener: ActorRef) extends Actor {
       taskStorage.put(task.id, (task, Completed))
       completedTasks += 1
       addNewTasks(links)
-      if (completedTasks == taskStorage.size)
+      if (completedTasks == taskStorage.size) {
+        log.info("Sending Finished message to the listener")
         listener ! Finished
+      }
     }
   }
 
@@ -80,14 +83,18 @@ class Master(config: Config, listener: ActorRef) extends Actor {
 
   def receive = {
     case Result(task, links) =>
+      log.info(s"Received Result from ${sender.path} of ${task.id}: $links")
       storeResult(task, links)
     case PullWork(size) =>
       getNewTasks(size) match {
         case Some(tasks) =>
+          log.info(s"Received PullWork from manager ${sender.path}, sending ${tasks.size} tasks")
           sender ! Work(tasks)
-        case _ =>
+        case None =>
+          log.info(s"Received PullWork from manager ${sender.path}, no work to send")
       }
     case NewTasks(links) =>
+      log.info(s"Received NewTasks from ${sender.path}: $links")
       addNewTasks(links)
   }
 }

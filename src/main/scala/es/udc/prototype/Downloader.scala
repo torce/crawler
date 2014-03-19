@@ -1,6 +1,6 @@
 package es.udc.prototype
 
-import akka.actor.Actor
+import akka.actor.{ActorLogging, Actor}
 import akka.pattern.pipe
 import spray.http._
 import spray.client.pipelining._
@@ -13,7 +13,7 @@ import scala.concurrent.Future
  * Date: 13/02/14
  * Time: 19:47
  */
-class Downloader extends Actor {
+class Downloader extends Actor with ActorLogging {
   implicit def map2headers(headers: Map[String, String]): List[HttpHeader] =
     headers.view.toList.map {
       h => new RawHeader(h._1, h._2)
@@ -25,12 +25,14 @@ class Downloader extends Actor {
   implicit val executionContext = context.dispatcher
 
   def receive = {
-    case Request(task@Task(_, url), headers) =>
+    case Request(task@Task(id, url), headers) =>
+      log.info(s"Received Request of $id")
       val request = Get(url).withHeaders(headers)
       val pipeline = sendReceive
       val response: Future[Response] = for {
         httpResponse <- pipeline(request)
       } yield {
+        log.info(s"Http Response received of $id")
         new Response(task, httpResponse.headers, httpResponse.entity.asString)
       }
       response pipeTo sender
