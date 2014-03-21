@@ -5,7 +5,6 @@ import akka.actor._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import scala.concurrent.duration._
-import scala.language.postfixOps
 
 /**
  * User: david
@@ -43,7 +42,7 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
   val BATCH_SIZE = CONFIG.getInt("prototype.manager.batch-size")
   val RETRY_TIMEOUT = CONFIG.getInt("prototype.manager.retry-timeout").milliseconds
 
-  val MSG_MAX_DELAY = 100 milliseconds
+  val MSG_MAX_DELAY = 100.milliseconds
 
   override def afterAll() {
     system.shutdown()

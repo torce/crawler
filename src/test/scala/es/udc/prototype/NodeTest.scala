@@ -47,7 +47,7 @@ class NodeTestServer extends Actor with HttpService {
   def receive = runRoute(route)
 }
 
-class NodeTest extends TestKit(ActorSystem("test-system", ConfigFactory.load("system.test.conf").withFallback(ConfigFactory.load())))
+class NodeTest extends TestKit(ActorSystem("test-system", ConfigFactory.load("system.test.conf")))
 with ImplicitSender
 with WordSpecLike
 with Matchers
