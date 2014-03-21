@@ -1,7 +1,5 @@
 package es.udc.prototype.pipeline
 
-import scala.concurrent.Future
-import akka.pattern.pipe
 import es.udc.prototype.{Response, Request}
 
 /**
@@ -10,21 +8,14 @@ import es.udc.prototype.{Response, Request}
  * Time: 14:39
  */
 trait RequestFilter extends Stage {
-
-  import context.dispatcher
-
   def handleRequest(request: Request): Request
 
   def handleResponse(response: Response): Response
 
   override def active = {
     case request: Request =>
-      Future {
-        handleRequest(request)
-      } pipeTo right
+      right ! handleRequest(request)
     case response: Response =>
-      Future {
-        handleResponse(response)
-      } pipeTo left
+      left ! handleResponse(response)
   }
 }

@@ -74,7 +74,7 @@ with BeforeAndAfterAll {
       val parent = system.actorOf(Props(classOf[MockParent], proxy.ref, Props(new Pipeline(CONFIG) with MockStartPlusOneStages)))
 
       proxy.expectMsg(PipelineStarted)
-      proxy.send(parent, 0)
+      proxy.send(parent, new ToRight(0))
       proxy.expectMsg(MockStartPlusOneStages.numberOfStages)
     }
 
@@ -92,7 +92,7 @@ with BeforeAndAfterAll {
         MockStartPlusOneStages.stages(i) ! new Exception
         proxy.expectMsg(PipelineRestarting)
         proxy.expectMsg(PipelineStarted)
-        proxy.send(parent, 0)
+        proxy.send(parent, new ToRight(0))
         proxy.expectMsg(MockStartPlusOneStages.numberOfStages)
       }
     }

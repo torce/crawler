@@ -14,22 +14,32 @@ import akka.actor.SupervisorStrategy.{Restart, Escalate}
  */
 
 /**
- * When the pipeline is ready to receive messages, this message is sended.
+ * When the pipeline is ready to receive messages, this message is sent.
  */
 case object PipelineStarted
 
 /**
- * When a stage is restarting, this message is sended to the parent actor.
- * Until the PipelineStarted message is sended, all received messages are dropped.
+ * When a stage is restarting, this message is sent to the parent actor.
+ * Until the PipelineStarted message is sent, all received messages are dropped.
  */
 case object PipelineRestarting
+
+/**
+ * Messages sent to the pipeline.
+ * ToLeft sends value to the last stage.
+ * ToRight sends value to the first stage.
+ * @param value The value to send to the stages.
+ */
+case class ToRight(value: Any)
+
+case class ToLeft(value: Any)
 
 trait StartStages {
   this: Actor =>
   def initStages(config: Config): Seq[ActorRef] = {
     import collection.JavaConversions._
     //TODO Find a better solution. For now, use the actor name as prefix to read config
-    config.getStringList(self.path.name + ".stages").toIndexedSeq.map {
+    config.getStringList(s"prototype.${self.path.name}.stages").toIndexedSeq.map {
       s =>
         context.actorOf(Props(Class.forName(s), config))
     }
@@ -73,6 +83,12 @@ class Pipeline(config: Config) extends Actor with StartStages {
   override def preStart() {
     val seqStages = initStages(config)
     seqStages.view.zipWithIndex.foreach {
+      //Only one stage
+      case (s, 0) if seqStages.size == 1 =>
+        firstStage = s
+        lastStage = s
+        stages.put(s, (Created, self, self))
+        s ! new LeftRight(self, self)
       // First stage
       case (s, 0) =>
         firstStage = s
@@ -91,10 +107,12 @@ class Pipeline(config: Config) extends Actor with StartStages {
   }
 
   def active: Actor.Receive = {
-    case m if sender == context.parent =>
-      firstStage ! m
-    case m if sender == lastStage =>
-      context.parent ! m
+    case ToRight(m) =>
+    firstStage ! m
+    case ToLeft(m) =>
+      lastStage ! m
+    case m if sender == lastStage || sender == firstStage =>
+    context.parent ! m
   }
 
   def receive = {
