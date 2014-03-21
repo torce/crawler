@@ -62,7 +62,7 @@ class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging
     if (taskStorage.get(task.id) == Some((task, InProgress))) {
       taskStorage.put(task.id, (task, Completed))
       completedTasks += 1
-      addNewTasks(links)
+      addNewTasks(links, task.depth + 1)
       if (completedTasks == taskStorage.size) {
         log.info("Sending Finished message to the listener")
         listener ! Finished
@@ -70,12 +70,12 @@ class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging
     }
   }
 
-  def addNewTasks(links: Seq[Uri]) {
+  def addNewTasks(links: Seq[Uri], depth: Int) {
     links foreach {
       link =>
         if (!taskStorage.contains(Master.generateId(link))) {
           val id = Master.generateId(link)
-          taskStorage.put(id, (new Task(id, link), New))
+          taskStorage.put(id, (new Task(id, link, depth), New))
           newTasks += 1
         }
     }
@@ -95,6 +95,6 @@ class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging
       }
     case NewTasks(links) =>
       log.info(s"Received NewTasks from ${sender.path}: $links")
-      addNewTasks(links)
+      addNewTasks(links, 0)
   }
 }

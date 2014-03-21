@@ -8,7 +8,7 @@ import spray.http.Uri
  * Time: 21:09
  */
 //Not a message
-case class Task(id: String, url: Uri)
+case class Task(id: String, url: Uri, depth: Int)
 
 //? -> Master
 case class NewTasks(links: Seq[Uri])

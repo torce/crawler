@@ -25,7 +25,7 @@ class Downloader extends Actor with ActorLogging {
   implicit val executionContext = context.dispatcher
 
   def receive = {
-    case Request(task@Task(id, url), headers) =>
+    case Request(task@Task(id, url, _), headers) =>
       log.info(s"Received Request of $id")
       val request = Get(url).withHeaders(headers)
       val pipeline = sendReceive

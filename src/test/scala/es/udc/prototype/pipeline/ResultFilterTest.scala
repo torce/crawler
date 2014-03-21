@@ -15,11 +15,11 @@ import spray.http.Uri.Empty
 
 class MockResultFilter extends ResultFilter {
   override def handleResponse(r: Response): Response = {
-    new Response(new Task("handled", r.task.url), r.headers, r.body)
+    new Response(new Task("handled", r.task.url, 0), r.headers, r.body)
   }
 
   override def handleResult(r: Result): Result = {
-    new Result(new Task("handled", r.task.url), r.links)
+    new Result(new Task("handled", r.task.url, 0), r.links)
   }
 }
 
@@ -47,16 +47,16 @@ with BeforeAndAfterAll {
   "A RequestFilter" should {
     "apply filter to response and send it to right" in {
       val (filter, _, right) = initFilter()
-      val input = new Response(new Task("unhandled", Empty), Map(), "body")
-      val expected = new Response(new Task("handled", Empty), Map(), "body")
+      val input = new Response(new Task("unhandled", Empty, 0), Map(), "body")
+      val expected = new Response(new Task("handled", Empty, 0), Map(), "body")
 
       filter ! input
       right.expectMsg(expected)
     }
     "apply filter to result and send it to left" in {
       val (filter, left, _) = initFilter()
-      val input = new Result(new Task("unhandled", Empty), Seq())
-      val expected = new Result(new Task("handled", Empty), Seq())
+      val input = new Result(new Task("unhandled", Empty, 0), Seq())
+      val expected = new Result(new Task("handled", Empty, 0), Seq())
 
       filter ! input
       left.expectMsg(expected)

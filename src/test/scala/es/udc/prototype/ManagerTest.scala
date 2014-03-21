@@ -19,7 +19,9 @@ class ProbesManager(config: Config, listener: ActorRef, master: ActorRef, downlo
                     crawler: ActorRef, requestPipeline: ActorRef, resultPipeline: ActorRef)
   extends Manager(config, listener) {
   override def initMaster(config: Config, listener: ActorRef) = master
+
   override def initDownloader(config: Config) = downloader
+
   override def initCrawler(config: Config) = crawler
 
   override def initRequestPipeline(config: Config) = requestPipeline
@@ -35,7 +37,9 @@ class MockChild extends Actor {
 
 class MockSupervisorManager(config: Config, listener: ActorRef) extends Manager(config, listener) {
   override def initMaster(config: Config, listener: ActorRef) = context.actorOf(Props[MockChild])
+
   override def initDownloader(config: Config) = context.actorOf(Props[MockChild])
+
   override def initCrawler(config: Config) = context.actorOf(Props[MockChild])
 
   override def initRequestPipeline(config: Config) = context.actorOf(Props[MockChild])
@@ -57,10 +61,10 @@ class PipelineAutoPilot(testActor: ActorRef) extends TestActor.AutoPilot {
 }
 
 class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("application.test.conf")))
-  with ImplicitSender
-  with WordSpecLike
-  with Matchers
-  with BeforeAndAfterAll {
+with ImplicitSender
+with WordSpecLike
+with Matchers
+with BeforeAndAfterAll {
 
   val CONFIG = ConfigFactory.load("application.test.conf")
   val BATCH_SIZE = CONFIG.getInt("prototype.manager.batch-size")
@@ -96,7 +100,7 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
     "send work to downloader through the request pipeline one by one in any order" in {
       val (manager, _, downloader, _, requestPipeline, _) = initManagerProbes(CONFIG)
 
-      val tasks = Set(new Task("id1", "url1"), new Task("id2", "url2"))
+      val tasks = Set(new Task("id1", "url1", 0), new Task("id2", "url2", 0))
 
       manager ! new Work(tasks.toSeq)
 
@@ -113,7 +117,7 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
     "request more work to master when empty" in {
       val (manager, master, _, _, _, _) = initManagerProbes(CONFIG)
 
-      manager ! new Work(Seq(new Task("id", "url")))
+      manager ! new Work(Seq(new Task("id", "url", 0)))
       master.expectMsg(new PullWork(BATCH_SIZE))
     }
     "retry requests to master after a timeout" in {
@@ -125,7 +129,7 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
     }
     "forward Result messages to master through the result pipeline" in {
       val (manager, master, _, crawler, _, resultPipeline) = initManagerProbes(CONFIG)
-      val msg = new Result(new Task("id", "url"), Seq("1"))
+      val msg = new Result(new Task("id", "url", 0), Seq("1"))
 
       crawler.send(manager, msg)
       resultPipeline.expectMsg(ToLeft(msg))
@@ -136,7 +140,7 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
     }
     "forward Response messages from downloader to crawler through the request and the result pipeline" in {
       val (manager, _, downloader, crawler, requestPipeline, resultPipeline) = initManagerProbes(CONFIG)
-      val msg = new Response(new Task("id", "url"), Map(), "body")
+      val msg = new Response(new Task("id", "url", 0), Map(), "body")
 
       downloader.send(manager, msg)
 
@@ -147,7 +151,7 @@ class ManagerTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("
     }
     "forward Request messages to crawler through the request pipeline" in {
       val (manager, master, downloader, crawler, requestPipeline, resultPipeline) = initManagerProbes(CONFIG)
-      val msg = new Request(new Task("id", "url"), Map())
+      val msg = new Request(new Task("id", "url", 0), Map())
 
       master.expectMsg(new PullWork(BATCH_SIZE)) //The initial work request
       master.send(manager, new Work(Seq(msg.task)))

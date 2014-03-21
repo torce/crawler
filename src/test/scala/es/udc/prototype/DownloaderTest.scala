@@ -56,9 +56,9 @@ class DownloaderTest
     "return a response from a request" in {
       val downloader = system.actorOf(Props[Downloader])
       val testUrl = makeUrl("/")
-      downloader ! new Request(new Task("id", testUrl), Map())
+      downloader ! new Request(new Task("id", testUrl, 0), Map())
       expectMsgPF() {
-        case Response(Task("id", _), _, TestServer.root) => Unit
+        case Response(Task("id", _, 0), _, TestServer.root) => Unit
       }
     }
   }

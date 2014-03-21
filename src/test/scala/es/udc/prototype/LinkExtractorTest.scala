@@ -10,7 +10,7 @@ import spray.http.Uri
  */
 class LinkExtractorTest extends WordSpecLike with Matchers {
 
-  def makeResponse(base: Uri, body: String) = new Response(new Task("", base), Map(), body)
+  def makeResponse(base: Uri, body: String) = new Response(new Task("", base, 0), Map(), body)
 
   "A LinkExtractor" should {
     "extract the links of a given response in any order" in {
