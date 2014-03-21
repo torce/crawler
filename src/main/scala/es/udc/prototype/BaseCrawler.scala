@@ -1,8 +1,6 @@
 package es.udc.prototype
 
 import akka.actor.{ActorLogging, Actor}
-import akka.pattern.pipe
-import scala.concurrent.Future
 import spray.http.Uri
 
 /**
@@ -18,16 +16,12 @@ trait Extractor {
 
 class BaseCrawler(extractor: Extractor) extends Actor with ActorLogging {
 
-  import context.dispatcher
 
   def receive = {
     case response@Response(task, headers, body) =>
-      val currentSender = sender
       log.info(s"Received Response of ${task.id}")
-      Future {
-        extractor.extractInformation(response)
-        log.info(s"Generated Result of ${task.id}")
-        new Result(task, extractor.extractLinks(response))
-      } pipeTo currentSender
+      extractor.extractInformation(response)
+      log.info(s"Generated Result of ${task.id}")
+      sender ! new Result(task, extractor.extractLinks(response))
   }
 }
