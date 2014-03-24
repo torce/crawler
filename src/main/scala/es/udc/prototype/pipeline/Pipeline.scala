@@ -65,6 +65,8 @@ class Pipeline(config: Config) extends Actor with StartStages {
 
   var activeStages: Int = 0
 
+  val timeout = config.getInt(s"prototype.${self.path.name}.retry-timeout")
+
   override val supervisorStrategy =
     OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1.minute) {
       case _: ActorInitializationException => Escalate
@@ -104,15 +106,17 @@ class Pipeline(config: Config) extends Actor with StartStages {
         stages.put(s, (Created, seqStages(i - 1), seqStages(i + 1)))
         s ! new LeftRight(seqStages(i - 1), seqStages(i + 1))
     }
+
+    context.setReceiveTimeout(1.second)
   }
 
   def active: Actor.Receive = {
     case ToRight(m) =>
-    firstStage ! m
+      firstStage ! m
     case ToLeft(m) =>
       lastStage ! m
     case m if sender == lastStage || sender == firstStage =>
-    context.parent ! m
+      context.parent ! m
   }
 
   def receive = {
@@ -122,7 +126,15 @@ class Pipeline(config: Config) extends Actor with StartStages {
       activeStages += 1
       if (activeStages == stages.size) {
         context.parent ! PipelineStarted
+        context.setReceiveTimeout(Duration.Undefined)
         context.become(active)
+      }
+    case ReceiveTimeout =>
+      stages.foreach {
+        s =>
+          if (s._2._1 == Created) {
+            s._1 ! LeftRight(s._2._2, s._2._3)
+          }
       }
   }
 }

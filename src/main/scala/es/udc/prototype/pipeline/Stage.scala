@@ -18,7 +18,7 @@ trait Stage extends Actor {
 
   def active: Actor.Receive
 
-  def receive = {
+  final def receive = {
     case LeftRight(l, r) =>
       left = l
       right = r
