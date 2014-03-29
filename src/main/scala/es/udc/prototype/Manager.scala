@@ -10,6 +10,7 @@ import es.udc.prototype.util.SingletonProxy
 import es.udc.prototype.pipeline._
 import es.udc.prototype.pipeline.ToRight
 import es.udc.prototype.pipeline.ToLeft
+import akka.routing.FromConfig
 
 /**
  * User: david
@@ -34,11 +35,7 @@ trait StartUp {
   }
 
   def initCrawler(config: Config): ActorRef = {
-    val extractor = Class.forName(config.getString("prototype.crawler.extractor.class")).newInstance()
-    val crawlerProps = Props(
-      Class.forName(config.getString("prototype.crawler.class")), extractor
-    )
-    context.actorOf(crawlerProps, "crawler")
+    context.actorOf(Props(Class.forName(config.getString("prototype.crawler.class")), config).withRouter(FromConfig()), "crawler")
   }
 
   def initRequestPipeline(config: Config) = {

@@ -1,15 +1,19 @@
-package es.udc.prototype
+package es.udc.prototype.crawler
 
 import scala.xml.XML
 import org.ccil.cowan.tagsoup.jaxp.SAXFactoryImpl
 import spray.http.{IllegalUriException, Uri}
+import com.typesafe.config.Config
+import es.udc.prototype.Response
 
 /**
  * User: david
  * Date: 5/03/14
  * Time: 18:56
  */
-class LinkExtractor extends Extractor {
+class LinkExtractor extends Crawler {
+  def this(config: Config) = this() // Compatibility constructor
+
   lazy val parser = XML.withSAXParser(new SAXFactoryImpl().newSAXParser())
 
   override def extractLinks(response: Response) = {
@@ -29,6 +33,6 @@ class LinkExtractor extends Extractor {
   }
 
   override def extractInformation(response: Response) = {
-    println(response.task.url)
+    log.info(s"${response.task.url}")
   }
 }
