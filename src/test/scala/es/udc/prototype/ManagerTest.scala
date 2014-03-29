@@ -8,7 +8,8 @@ import scala.concurrent.duration._
 import akka.actor.ActorIdentity
 import scala.Some
 import akka.actor.Identify
-import es.udc.prototype.pipeline.{ToLeft, ToRight}
+import es.udc.prototype.pipeline.{PipelineRestarting, PipelineStarted, ToLeft, ToRight}
+import spray.http.Uri
 
 /**
  * User: david
@@ -76,16 +77,30 @@ with BeforeAndAfterAll {
     system.shutdown()
   }
 
-  def initManagerProbes(config: Config) = {
+  /**
+   * Initializes the manager actor in a active state.
+   * Injects TestProbe instead of child actors.
+   * @param config Configuration parameter for manager actor.
+   * @return A Tuple containing the manager as first element and
+   *         TestProbe of downloader, crawler, requestPipeline and resultPipeline
+   */
+  def initManagerActive(config: Config) = {
+    val (manager, master, downloader, crawler, requestPipe, resultPipe) = initManagerCreated(config)
+    requestPipe.send(manager, PipelineStarted)
+    requestPipe.setAutoPilot(new PipelineAutoPilot(requestPipe.ref))
+
+    resultPipe.send(manager, PipelineStarted)
+    resultPipe.setAutoPilot(new PipelineAutoPilot(resultPipe.ref))
+
+    (manager, master, downloader, crawler, requestPipe, resultPipe)
+  }
+
+  def initManagerCreated(config: Config) = {
     val (master, downloader, crawler, requestPipe, resultPipe) =
       (TestProbe(), TestProbe(), TestProbe(), TestProbe(), TestProbe())
     val manager = system.actorOf(
       Props(classOf[ProbesManager], CONFIG, Actor.noSender, master.ref,
         downloader.ref, crawler.ref, requestPipe.ref, resultPipe.ref))
-
-    requestPipe.setAutoPilot(new PipelineAutoPilot(requestPipe.ref))
-    resultPipe.setAutoPilot(new PipelineAutoPilot(resultPipe.ref))
-
     (manager, master, downloader, crawler, requestPipe, resultPipe)
   }
 
@@ -98,7 +113,7 @@ with BeforeAndAfterAll {
 
   "A Manager actor" should {
     "send work to downloader through the request pipeline one by one in any order" in {
-      val (manager, _, downloader, _, requestPipeline, _) = initManagerProbes(CONFIG)
+      val (manager, _, downloader, _, requestPipeline, _) = initManagerActive(CONFIG)
 
       val tasks = Set(new Task("id1", "url1", 0), new Task("id2", "url2", 0))
 
@@ -115,20 +130,20 @@ with BeforeAndAfterAll {
       }
     }
     "request more work to master when empty" in {
-      val (manager, master, _, _, _, _) = initManagerProbes(CONFIG)
+      val (manager, master, _, _, _, _) = initManagerActive(CONFIG)
 
       manager ! new Work(Seq(new Task("id", "url", 0)))
       master.expectMsg(new PullWork(BATCH_SIZE))
     }
     "retry requests to master after a timeout" in {
-      val (_, master, _, _, _, _) = initManagerProbes(CONFIG)
+      val (_, master, _, _, _, _) = initManagerActive(CONFIG)
       val msg = new PullWork(BATCH_SIZE)
 
       master.expectMsg(msg)
       master.expectMsg(RETRY_TIMEOUT + MSG_MAX_DELAY, msg)
     }
     "forward Result messages to master through the result pipeline" in {
-      val (manager, master, _, crawler, _, resultPipeline) = initManagerProbes(CONFIG)
+      val (manager, master, _, crawler, _, resultPipeline) = initManagerActive(CONFIG)
       val msg = new Result(new Task("id", "url", 0), Seq("1"))
 
       crawler.send(manager, msg)
@@ -139,7 +154,7 @@ with BeforeAndAfterAll {
       master.sender should be(manager)
     }
     "forward Response messages from downloader to crawler through the request and the result pipeline" in {
-      val (manager, _, downloader, crawler, requestPipeline, resultPipeline) = initManagerProbes(CONFIG)
+      val (manager, _, downloader, crawler, requestPipeline, resultPipeline) = initManagerActive(CONFIG)
       val msg = new Response(new Task("id", "url", 0), Map(), "body")
 
       downloader.send(manager, msg)
@@ -150,7 +165,7 @@ with BeforeAndAfterAll {
       crawler.expectMsg(msg)
     }
     "forward Request messages to crawler through the request pipeline" in {
-      val (manager, master, downloader, crawler, requestPipeline, resultPipeline) = initManagerProbes(CONFIG)
+      val (manager, master, downloader, crawler, requestPipeline, resultPipeline) = initManagerActive(CONFIG)
       val msg = new Request(new Task("id", "url", 0), Map())
 
       master.expectMsg(new PullWork(BATCH_SIZE)) //The initial work request
@@ -186,6 +201,163 @@ with BeforeAndAfterAll {
       crawler ! new Exception
       crawler ! new Identify(1)
       expectMsg(new ActorIdentity(1, Some(crawler)))
+    }
+    "restart requestPipeline when terminates" in {
+      val (_, _, _, _, requestPipeline, _) = initManagerAct(CONFIG)
+      val listener = TestProbe()
+      listener.watch(requestPipeline)
+      listener.expectNoMsg() //Must not receive Terminated msg
+      requestPipeline ! new Exception
+      requestPipeline ! new Identify(1)
+      expectMsg(new ActorIdentity(1, Some(requestPipeline)))
+    }
+    "restart resultPipeline when terminates" in {
+      val (_, _, _, _, _, resultPipeline) = initManagerAct(CONFIG)
+      val listener = TestProbe()
+      listener.watch(resultPipeline)
+      listener.expectNoMsg() //Must not receive Terminated msg
+      resultPipeline ! new Exception
+      resultPipeline ! new Identify(1)
+      expectMsg(new ActorIdentity(1, Some(resultPipeline)))
+    }
+    "store the work sent by master when none of the pipelines is initialized" in {
+      val (manager, master, _, _, requestPipe, _) = initManagerCreated(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+
+      master.send(manager, new Work(Seq(task)))
+      requestPipe.send(manager, PipelineStarted)
+      requestPipe.expectMsg(new ToRight(new Request(task, Map())))
+    }
+    "store the work sent by master when the request pipeline is not ready" in {
+      val (manager, master, _, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+      resultPipe.send(manager, PipelineStarted)
+
+      master.send(manager, new Work(Seq(task)))
+      requestPipe.send(manager, PipelineStarted)
+      requestPipe.expectMsg(new ToRight(new Request(task, Map())))
+    }
+    "store the work sent by master when the result pipeline is not ready" in {
+      val (manager, master, downloader, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+      requestPipe.send(manager, PipelineStarted)
+
+      master.send(manager, new Work(Seq(task)))
+      requestPipe.expectMsg(new ToRight(new Request(task, Map())))
+      requestPipe.reply(new Request(task, Map()))
+      downloader.expectMsg(new Request(task, Map()))
+      downloader.reply(new Response(task, Map(), ""))
+      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
+      requestPipe.reply(new Response(task, Map(), ""))
+      resultPipe.send(manager, PipelineStarted)
+      resultPipe.expectMsg(new ToRight(new Response(task, Map(), "")))
+    }
+    "store the responses sent by the downloader when the request pipeline is not ready" in {
+      val (manager, _, downloader, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+      resultPipe.send(manager, PipelineStarted)
+
+      downloader.send(manager, new Response(task, Map(), ""))
+      requestPipe.send(manager, PipelineStarted)
+      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
+    }
+    "store the responses sent by the request pipeline when the result pipeline is not ready" in {
+      val (manager, _, _, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+      requestPipe.send(manager, PipelineStarted)
+
+      requestPipe.send(manager, new Response(task, Map(), ""))
+      resultPipe.send(manager, PipelineStarted)
+      resultPipe.expectMsg(new ToRight(new Response(task, Map(), "")))
+    }
+    "store the results sent by the crawler when the result pipeline is not ready" in {
+      val (manager, _, _, crawler, requestPipe, resultPipe) = initManagerCreated(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+      requestPipe.send(manager, PipelineStarted)
+
+      crawler.send(manager, new Result(task, Seq()))
+      resultPipe.send(manager, PipelineStarted)
+      resultPipe.expectMsg(new ToLeft(new Result(task, Seq())))
+    }
+    "store the work sent by master when the request pipeline is restarting" in {
+      val (manager, master, _, _, requestPipe, _) = initManagerActive(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+
+      requestPipe.send(manager, PipelineRestarting)
+      master.send(manager, new Work(Seq(task)))
+      requestPipe.expectNoMsg()
+      requestPipe.send(manager, PipelineStarted)
+      requestPipe.expectMsg(new ToRight(new Request(task, Map())))
+    }
+    "store the work sent by master when the result pipeline is restarting" in {
+      val (manager, master, downloader, _, requestPipe, resultPipe) = initManagerActive(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+
+      resultPipe.send(manager, PipelineRestarting)
+      master.send(manager, new Work(Seq(task)))
+      requestPipe.expectMsg(new ToRight(new Request(task, Map())))
+      requestPipe.reply(new Request(task, Map()))
+      downloader.expectMsg(new Request(task, Map()))
+      downloader.reply(new Response(task, Map(), ""))
+      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
+      requestPipe.reply(new Response(task, Map(), ""))
+      resultPipe.send(manager, PipelineStarted)
+      resultPipe.expectMsg(new ToRight(new Response(task, Map(), "")))
+    }
+    "store the responses sent by the downloader when the request pipeline is restarting" in {
+      val (manager, _, downloader, _, requestPipe, resultPipe) = initManagerActive(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+
+      resultPipe.send(manager, PipelineRestarting)
+      downloader.send(manager, new Response(task, Map(), ""))
+      requestPipe.send(manager, PipelineStarted)
+      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
+    }
+    "store the responses sent by the request pipeline when the result pipeline is restarting" in {
+      val (manager, _, _, _, requestPipe, resultPipe) = initManagerActive(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+
+      resultPipe.send(manager, PipelineRestarting)
+      requestPipe.send(manager, new Response(task, Map(), ""))
+      resultPipe.send(manager, PipelineStarted)
+      resultPipe.expectMsg(new ToRight(new Response(task, Map(), "")))
+    }
+    "store the results sent by the crawler when the result pipeline is restarting" in {
+      val (manager, _, _, crawler, _, resultPipe) = initManagerActive(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+
+      resultPipe.send(manager, PipelineRestarting)
+      crawler.send(manager, new Result(task, Seq()))
+      resultPipe.send(manager, PipelineStarted)
+      resultPipe.expectMsg(new ToLeft(new Result(task, Seq())))
+    }
+    "store the responses sent by the downloader when none of the pipelines is ready" in {
+      val (manager, _, downloader, _, requestPipe, _) = initManagerCreated(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+
+      downloader.send(manager, new Response(task, Map(), ""))
+      requestPipe.send(manager, PipelineStarted)
+      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
+    }
+    "store the results sent by the crawler when none of the pipelines is ready" in {
+      val (manager, _, _, crawler, _, resultPipe) = initManagerCreated(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+
+      crawler.send(manager, new Result(task, Seq()))
+      resultPipe.send(manager, PipelineStarted)
+      resultPipe.expectMsg(new ToLeft(new Result(task, Seq())))
+    }
+    "return to the initial state if both pipelines are restarting" in {
+      val (manager, master, downloader, crawler, requestPipe, resultPipe) = initManagerActive(CONFIG)
+      val task = new Task("id", Uri.Empty, 0)
+
+      requestPipe.send(manager, PipelineRestarting)
+      resultPipe.send(manager, PipelineRestarting)
+      master.send(manager, new Work(Seq(task)))
+      downloader.send(manager, new Response(task, Map(), ""))
+      crawler.send(manager, new Result(task, Seq()))
+      requestPipe.expectNoMsg()
+      resultPipe.expectNoMsg()
     }
   }
 }
