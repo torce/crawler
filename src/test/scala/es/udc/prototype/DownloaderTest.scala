@@ -8,7 +8,7 @@ import spray.routing.HttpService
 import spray.can.Http
 import akka.io.IO
 import akka.io.Tcp.Bound
-import spray.http.Uri
+import spray.http.{StatusCodes, Uri}
 
 /**
  * User: david
@@ -25,6 +25,8 @@ class TestServer extends Actor with HttpService {
       get {
         complete(TestServer.root)
       }
+    } ~ path("redirect") {
+      redirect("/", StatusCodes.PermanentRedirect)
     }
   }
   def actorRefFactory = context.system
@@ -56,6 +58,14 @@ class DownloaderTest
     "return a response from a request" in {
       val downloader = system.actorOf(Props[Downloader])
       val testUrl = makeUrl("/")
+      downloader ! new Request(new Task("id", testUrl, 0), Map())
+      expectMsgPF() {
+        case Response(Task("id", _, 0), _, TestServer.root) => Unit
+      }
+    }
+    "follow redirections" in {
+      val downloader = system.actorOf(Props[Downloader])
+      val testUrl = makeUrl("/redirect")
       downloader ! new Request(new Task("id", testUrl, 0), Map())
       expectMsgPF() {
         case Response(Task("id", _, 0), _, TestServer.root) => Unit
