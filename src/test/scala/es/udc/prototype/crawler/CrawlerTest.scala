@@ -5,6 +5,7 @@ import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
 import org.scalatest._
 import es.udc.prototype.{Result, Task, Response}
+import spray.http.StatusCode.int2StatusCode
 
 /**
  * User: david
@@ -34,7 +35,7 @@ with BeforeAndAfterAll {
 
   "A Crawler" should {
     "extract information and return a Result with the extracted links" in {
-      val testResponse = new Response(new Task("id", "url", 0), Map(), "body")
+      val testResponse = new Response(new Task("id", "url", 0), int2StatusCode(200), Map(), "body")
 
       val crawler = TestActorRef(new MockExtractor)
       crawler ! testResponse

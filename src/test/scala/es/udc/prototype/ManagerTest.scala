@@ -9,7 +9,7 @@ import akka.actor.ActorIdentity
 import scala.Some
 import akka.actor.Identify
 import es.udc.prototype.pipeline.{PipelineRestarting, PipelineStarted, ToLeft, ToRight}
-import spray.http.Uri
+import spray.http.{StatusCodes, Uri}
 
 /**
  * User: david
@@ -155,7 +155,7 @@ with BeforeAndAfterAll {
     }
     "forward Response messages from downloader to crawler through the request and the result pipeline" in {
       val (manager, _, downloader, crawler, requestPipeline, resultPipeline) = initManagerActive(CONFIG)
-      val msg = new Response(new Task("id", "url", 0), Map(), "body")
+      val msg = new Response(new Task("id", "url", 0), StatusCodes.OK, Map(), "body")
 
       downloader.send(manager, msg)
 
@@ -246,29 +246,29 @@ with BeforeAndAfterAll {
       requestPipe.expectMsg(new ToRight(new Request(task, Map())))
       requestPipe.reply(new Request(task, Map()))
       downloader.expectMsg(new Request(task, Map()))
-      downloader.reply(new Response(task, Map(), ""))
-      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
-      requestPipe.reply(new Response(task, Map(), ""))
+      downloader.reply(new Response(task, StatusCodes.OK, Map(), ""))
+      requestPipe.expectMsg(new ToLeft(new Response(task, StatusCodes.OK, Map(), "")))
+      requestPipe.reply(new Response(task, StatusCodes.OK, Map(), ""))
       resultPipe.send(manager, PipelineStarted)
-      resultPipe.expectMsg(new ToRight(new Response(task, Map(), "")))
+      resultPipe.expectMsg(new ToRight(new Response(task, StatusCodes.OK, Map(), "")))
     }
     "store the responses sent by the downloader when the request pipeline is not ready" in {
       val (manager, _, downloader, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
       val task = new Task("id", Uri.Empty, 0)
       resultPipe.send(manager, PipelineStarted)
 
-      downloader.send(manager, new Response(task, Map(), ""))
+      downloader.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
       requestPipe.send(manager, PipelineStarted)
-      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
+      requestPipe.expectMsg(new ToLeft(new Response(task, StatusCodes.OK, Map(), "")))
     }
     "store the responses sent by the request pipeline when the result pipeline is not ready" in {
       val (manager, _, _, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
       val task = new Task("id", Uri.Empty, 0)
       requestPipe.send(manager, PipelineStarted)
 
-      requestPipe.send(manager, new Response(task, Map(), ""))
+      requestPipe.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
       resultPipe.send(manager, PipelineStarted)
-      resultPipe.expectMsg(new ToRight(new Response(task, Map(), "")))
+      resultPipe.expectMsg(new ToRight(new Response(task, StatusCodes.OK, Map(), "")))
     }
     "store the results sent by the crawler when the result pipeline is not ready" in {
       val (manager, _, _, crawler, requestPipe, resultPipe) = initManagerCreated(CONFIG)
@@ -298,29 +298,29 @@ with BeforeAndAfterAll {
       requestPipe.expectMsg(new ToRight(new Request(task, Map())))
       requestPipe.reply(new Request(task, Map()))
       downloader.expectMsg(new Request(task, Map()))
-      downloader.reply(new Response(task, Map(), ""))
-      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
-      requestPipe.reply(new Response(task, Map(), ""))
+      downloader.reply(new Response(task, StatusCodes.OK, Map(), ""))
+      requestPipe.expectMsg(new ToLeft(new Response(task, StatusCodes.OK, Map(), "")))
+      requestPipe.reply(new Response(task, StatusCodes.OK, Map(), ""))
       resultPipe.send(manager, PipelineStarted)
-      resultPipe.expectMsg(new ToRight(new Response(task, Map(), "")))
+      resultPipe.expectMsg(new ToRight(new Response(task, StatusCodes.OK, Map(), "")))
     }
     "store the responses sent by the downloader when the request pipeline is restarting" in {
       val (manager, _, downloader, _, requestPipe, resultPipe) = initManagerActive(CONFIG)
       val task = new Task("id", Uri.Empty, 0)
 
       resultPipe.send(manager, PipelineRestarting)
-      downloader.send(manager, new Response(task, Map(), ""))
+      downloader.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
       requestPipe.send(manager, PipelineStarted)
-      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
+      requestPipe.expectMsg(new ToLeft(new Response(task, StatusCodes.OK, Map(), "")))
     }
     "store the responses sent by the request pipeline when the result pipeline is restarting" in {
       val (manager, _, _, _, requestPipe, resultPipe) = initManagerActive(CONFIG)
       val task = new Task("id", Uri.Empty, 0)
 
       resultPipe.send(manager, PipelineRestarting)
-      requestPipe.send(manager, new Response(task, Map(), ""))
+      requestPipe.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
       resultPipe.send(manager, PipelineStarted)
-      resultPipe.expectMsg(new ToRight(new Response(task, Map(), "")))
+      resultPipe.expectMsg(new ToRight(new Response(task, StatusCodes.OK, Map(), "")))
     }
     "store the results sent by the crawler when the result pipeline is restarting" in {
       val (manager, _, _, crawler, _, resultPipe) = initManagerActive(CONFIG)
@@ -335,9 +335,9 @@ with BeforeAndAfterAll {
       val (manager, _, downloader, _, requestPipe, _) = initManagerCreated(CONFIG)
       val task = new Task("id", Uri.Empty, 0)
 
-      downloader.send(manager, new Response(task, Map(), ""))
+      downloader.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
       requestPipe.send(manager, PipelineStarted)
-      requestPipe.expectMsg(new ToLeft(new Response(task, Map(), "")))
+      requestPipe.expectMsg(new ToLeft(new Response(task, StatusCodes.OK, Map(), "")))
     }
     "store the results sent by the crawler when none of the pipelines is ready" in {
       val (manager, _, _, crawler, _, resultPipe) = initManagerCreated(CONFIG)
@@ -354,7 +354,7 @@ with BeforeAndAfterAll {
       requestPipe.send(manager, PipelineRestarting)
       resultPipe.send(manager, PipelineRestarting)
       master.send(manager, new Work(Seq(task)))
-      downloader.send(manager, new Response(task, Map(), ""))
+      downloader.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
       crawler.send(manager, new Result(task, Seq()))
       requestPipe.expectNoMsg()
       resultPipe.expectNoMsg()

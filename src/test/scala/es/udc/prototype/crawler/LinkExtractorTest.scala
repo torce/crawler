@@ -15,7 +15,7 @@ import es.udc.prototype.{Task, Response}
 class LinkExtractorTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("application.test.conf")))
 with WordSpecLike with Matchers {
 
-  def makeResponse(base: Uri, body: String) = new Response(new Task("", base, 0), Map(), body)
+  def makeResponse(base: Uri, body: String) = new Response(new Task("", base, 0), 200, Map(), body)
 
   def initExtractor = TestActorRef(new LinkExtractor).underlyingActor
 

@@ -33,7 +33,7 @@ class Downloader extends Actor with ActorLogging {
         httpResponse <- pipeline(request)
       } yield {
         log.info(s"Http Response received of $id")
-        new Response(task, httpResponse.headers, httpResponse.entity.asString)
+        new Response(task, httpResponse.status, httpResponse.headers, httpResponse.entity.asString)
       }
       response pipeTo sender
   }

@@ -17,13 +17,13 @@ trait Crawler extends Actor with ActorLogging {
   def extractInformation(response: Response): Unit
 
   def receive = {
-    case response@Response(task, headers, body) =>
-      log.info(s"Received Response of ${task.id}")
+    case response: Response =>
+      log.info(s"Received Response of ${response.task.id}")
       extractInformation(response)
-      log.info(s"Generated Result of ${task.id}")
+      log.info(s"Generated Result of ${response.task.id}")
 
       // The crawler actor must be behind a router
       // The results are sent using the router ActorRef
-      sender.tell(new Result(task, extractLinks(response)), context.parent)
+      sender.tell(new Result(response.task, extractLinks(response)), context.parent)
   }
 }

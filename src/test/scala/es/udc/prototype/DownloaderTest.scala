@@ -60,7 +60,15 @@ class DownloaderTest
       val testUrl = makeUrl("/")
       downloader ! new Request(new Task("id", testUrl, 0), Map())
       expectMsgPF() {
-        case Response(Task("id", _, 0), _, TestServer.root) => Unit
+        case Response(Task("id", _, 0), StatusCodes.OK, _, TestServer.root) => Unit
+      }
+    }
+    "return the status code in the response" in {
+      val downloader = system.actorOf(Props[Downloader])
+      val testUrl = makeUrl("/unexistent")
+      downloader ! new Request(new Task("id", testUrl, 0), Map())
+      expectMsgPF() {
+        case Response(Task("id", _, 0), StatusCodes.NotFound, _, _) => Unit
       }
     }
     "follow redirections" in {

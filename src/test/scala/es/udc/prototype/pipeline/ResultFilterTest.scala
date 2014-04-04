@@ -6,6 +6,7 @@ import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import es.udc.prototype.{Result, Response, Task}
 import spray.http.Uri.Empty
+import spray.http.StatusCodes
 
 /**
  * User: david
@@ -15,7 +16,7 @@ import spray.http.Uri.Empty
 
 class MockResultFilter extends ResultFilter {
   override def handleResponse(r: Response): Response = {
-    new Response(new Task("handled", r.task.url, 0), r.headers, r.body)
+    new Response(new Task("handled", r.task.url, 0), StatusCodes.OK, r.headers, r.body)
   }
 
   override def handleResult(r: Result): Result = {
@@ -47,8 +48,8 @@ with BeforeAndAfterAll {
   "A RequestFilter" should {
     "apply filter to response and send it to right" in {
       val (filter, _, right) = initFilter()
-      val input = new Response(new Task("unhandled", Empty, 0), Map(), "body")
-      val expected = new Response(new Task("handled", Empty, 0), Map(), "body")
+      val input = new Response(new Task("unhandled", Empty, 0), StatusCodes.OK, Map(), "body")
+      val expected = new Response(new Task("handled", Empty, 0), StatusCodes.OK, Map(), "body")
 
       filter ! input
       right.expectMsg(expected)

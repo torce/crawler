@@ -1,6 +1,6 @@
 package es.udc.prototype
 
-import spray.http.Uri
+import spray.http.{StatusCode, Uri}
 
 /**
  * User: david
@@ -31,4 +31,4 @@ case class Work(tasks: Seq[Task])
 case class Request(task: Task, headers: Map[String, String])
 
 //Downloader -> Manager -> BaseCrawler
-case class Response(task: Task, headers: Map[String, String], body: String)
+case class Response(task: Task, status: StatusCode, headers: Map[String, String], body: String)
