@@ -9,6 +9,7 @@ import spray.can.Http
 import akka.io.IO
 import akka.io.Tcp.Bound
 import spray.http.{StatusCodes, Uri}
+import scala.concurrent.duration._
 
 /**
  * User: david
@@ -29,7 +30,9 @@ class TestServer extends Actor with HttpService {
       redirect("/", StatusCodes.PermanentRedirect)
     }
   }
+
   def actorRefFactory = context.system
+
   def receive = runRoute(route)
 }
 
@@ -48,7 +51,11 @@ class DownloaderTest
   //Init the test server
   val server = system.actorOf(Props[TestServer])
   IO(Http) ! Http.Bind(server, host, port)
-  ignoreMsg { case Bound(_) => true } //Ignore the Bound message
+  ignoreMsg {
+    case Bound(_) => true
+  }
+
+  //Ignore the Bound message
 
   override def afterAll() {
     system.shutdown()
@@ -76,7 +83,15 @@ class DownloaderTest
       val testUrl = makeUrl("/redirect")
       downloader ! new Request(new Task("id", testUrl, 0), Map())
       expectMsgPF() {
-        case Response(Task("id", _, 0), _, TestServer.root) => Unit
+        case Response(Task("id", _, 0), StatusCodes.OK, _, TestServer.root) => Unit
+      }
+    }
+    "send an error message to Manager in case of any exception" in {
+      val downloader = system.actorOf(Props[Downloader])
+      val testUrl = Uri("http://0.0.0.0:1")
+      downloader ! new Request(new Task("id", testUrl, 0), Map())
+      expectMsgPF(150.seconds) {
+        case Error(Task("id", _, 0), _) => Unit
       }
     }
   }

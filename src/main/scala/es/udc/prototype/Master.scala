@@ -2,9 +2,9 @@ package es.udc.prototype
 
 import akka.actor.{ActorLogging, ActorRef, Actor}
 import scala.collection.mutable.{Map => MMap}
-import es.udc.prototype.Master.TaskStatus.TaskStatus
 import com.typesafe.config.Config
 import spray.http.Uri
+import es.udc.prototype.Master.TaskStatus
 
 /**
  * User: david
@@ -14,10 +14,15 @@ import spray.http.Uri
 
 object Master {
 
-  object TaskStatus extends Enumeration {
-    type TaskStatus = Value
-    val New, InProgress, Completed = Value
-  }
+  sealed trait TaskStatus
+
+  case object New extends TaskStatus
+
+  case object InProgress extends TaskStatus
+
+  case object Completed extends TaskStatus
+
+  case class WithError(e: Throwable) extends TaskStatus
 
   def generateId(url: Uri): String = {
     url.toString()
@@ -25,12 +30,12 @@ object Master {
 }
 
 class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging {
-  private val taskStorage: MMap[String, (Task, TaskStatus)] = MMap()
+  protected val taskStorage: MMap[String, (Task, TaskStatus)] = MMap()
 
-  import Master.TaskStatus._
+  import Master._
 
-  var newTasks: Int = 0
-  var completedTasks = 0
+  protected var newTasks: Int = 0
+  protected var completedTasks = 0
 
   override def preStart() {
     log.info("Sending Started message to the listener")
@@ -58,15 +63,33 @@ class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging
     }
   }
 
-  def storeResult(task: Task, links: Seq[Uri]): Unit = {
+  def storeCompleted(task: Task, status: TaskStatus) = {
     if (taskStorage.get(task.id) == Some((task, InProgress))) {
-      taskStorage.put(task.id, (task, Completed))
+      taskStorage.put(task.id, (task, status))
       completedTasks += 1
+      true
+    } else {
+      false
+    }
+  }
+
+  def notifyIfCompleted() {
+    if (completedTasks == taskStorage.size) {
+      log.info("Sending Finished message to the listener")
+      listener ! Finished
+    }
+  }
+
+  def storeResult(task: Task, links: Seq[Uri]): Unit = {
+    if (storeCompleted(task, Completed)) {
       addNewTasks(links, task.depth + 1)
-      if (completedTasks == taskStorage.size) {
-        log.info("Sending Finished message to the listener")
-        listener ! Finished
-      }
+      notifyIfCompleted()
+    }
+  }
+
+  def storeError(task: Task, reason: Throwable) {
+    if (storeCompleted(task, new WithError(reason))) {
+      notifyIfCompleted()
     }
   }
 
@@ -96,5 +119,8 @@ class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging
     case NewTasks(links) =>
       log.info(s"Received NewTasks from ${sender.path}: $links")
       addNewTasks(links, 0)
+    case Error(task, reason: Throwable) =>
+      log.info(s"Received Error of task: ${task.id} from ${sender.path}")
+      storeError(task, reason)
   }
 }

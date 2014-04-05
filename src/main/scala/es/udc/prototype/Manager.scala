@@ -59,15 +59,15 @@ case object Active extends ManagerState
 
 case class ManagerData(taskList: Queue[Task],
                        downloaderQueue: Queue[Response] = Queue(),
-                 requestPipeQueue: Queue[Response] = Queue(),
-                 crawlerQueue: Queue[Result] = Queue())
+                       requestPipeQueue: Queue[Response] = Queue(),
+                       crawlerQueue: Queue[Result] = Queue())
 
 class Manager(config: Config, listener: ActorRef) extends Actor
 with ActorLogging
 with StartUp
 with FSM[ManagerState, ManagerData] {
 
-  case class NextTask(task : Task)
+  case class NextTask(task: Task)
 
   val batchSize = config.getInt("prototype.manager.batch-size")
   val retryTimeout = config.getInt("prototype.manager.retry-timeout").milliseconds
@@ -148,6 +148,13 @@ with FSM[ManagerState, ManagerData] {
       stay()
   }
 
+  val errorHandler: StateFunction = {
+    case Event(error: Error, _) =>
+      log.info(s"Forwarding error of task ${error.task.id} to Master")
+      master ! error
+      stay()
+  }
+
   when(Created) {
     case Event(PipelineStarted, ManagerData(taskList, downloaderQueue, rpq, cq)) if sender == requestPipeline =>
       downloaderQueue.foreach(requestPipeline ! new ToLeft(_))
@@ -160,7 +167,7 @@ with FSM[ManagerState, ManagerData] {
       }
 
     case Event(PipelineStarted, ManagerData(taskList, dq, rpq, crawlerQueue)) if sender == resultPipeline =>
-    crawlerQueue.foreach(resultPipeline ! new ToLeft(_))
+      crawlerQueue.foreach(resultPipeline ! new ToLeft(_))
       goto(ResultPipelineActive)
 
     case Event(Work(tasks), ManagerData(taskList, _, _, _)) =>
@@ -175,7 +182,7 @@ with FSM[ManagerState, ManagerData] {
       stay using new ManagerData(tl, downloaderQueue.enqueue(response), rpq, cq)
   }
 
-  when(RequestPipelineActive)(fromMaster orElse fromSelf orElse fromDownloader orElse {
+  when(RequestPipelineActive)(fromMaster orElse fromSelf orElse fromDownloader orElse errorHandler orElse {
     case Event(PipelineStarted, ManagerData(taskList, _, requestPipeQueue, crawlerQueue)) if sender == resultPipeline =>
       requestPipeQueue.foreach(resultPipeline ! new ToRight(_))
       crawlerQueue.foreach(resultPipeline ! new ToLeft(_))
@@ -205,7 +212,7 @@ with FSM[ManagerState, ManagerData] {
       stay using new ManagerData(tl, dq, rpq, crawlerQueue.enqueue(result))
   })
 
-  when(ResultPipelineActive)(fromCrawler orElse fromResultPipeline orElse {
+  when(ResultPipelineActive)(fromCrawler orElse fromResultPipeline orElse errorHandler orElse {
     case Event(PipelineStarted, ManagerData(taskList, downloaderQueue, _, _)) if sender == requestPipeline =>
       downloaderQueue.foreach(requestPipeline ! new ToLeft(_))
 
@@ -230,9 +237,9 @@ with FSM[ManagerState, ManagerData] {
   })
 
   when(Active, stateTimeout = retryTimeout)(fromMaster orElse fromSelf orElse fromDownloader orElse
-    fromRequestPipeline orElse fromResultPipeline orElse fromCrawler orElse {
+    fromRequestPipeline orElse fromResultPipeline orElse fromCrawler orElse errorHandler orElse {
     case Event(StateTimeout, ManagerData(Queue(), _, _, _)) =>
-    log.info(s"Received StateTimeout. Requesting work from Master")
+      log.info(s"Received StateTimeout. Requesting work from Master")
       master ! new PullWork(batchSize)
       stay()
 

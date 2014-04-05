@@ -153,6 +153,16 @@ with BeforeAndAfterAll {
       master.expectMsg(msg)
       master.sender should be(manager)
     }
+    "forward Error messages from anywhere to master" in {
+      val (manager, master, _, _, _, _) = initManagerActive(CONFIG)
+      val msg = new Error(new Task("id", "url", 0), new Exception)
+
+      manager ! msg
+
+      master.expectMsg(new PullWork(BATCH_SIZE)) //The initial work request
+      master.expectMsg(msg)
+      master.sender should be(manager)
+    }
     "forward Response messages from downloader to crawler through the request and the result pipeline" in {
       val (manager, _, downloader, crawler, requestPipeline, resultPipeline) = initManagerActive(CONFIG)
       val msg = new Response(new Task("id", "url", 0), StatusCodes.OK, Map(), "body")

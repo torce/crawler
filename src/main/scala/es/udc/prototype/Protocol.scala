@@ -32,3 +32,6 @@ case class Request(task: Task, headers: Map[String, String])
 
 //Downloader -> Manager -> BaseCrawler
 case class Response(task: Task, status: StatusCode, headers: Map[String, String], body: String)
+
+//? -> Master
+case class Error(task: Task, reason: Throwable)
