@@ -6,6 +6,7 @@ import org.scalatest.{WordSpecLike, BeforeAndAfterAll, Matchers}
 import com.typesafe.config.{Config, ConfigFactory}
 import spray.http.Uri
 import scala.collection.mutable.{Map => MMap}
+import scala.concurrent.duration._
 
 /**
  * User: david
@@ -28,7 +29,7 @@ with BeforeAndAfterAll {
     system.shutdown()
   }
 
-  def initMaster() = {
+  def initMaster(config: Config) = {
     val listener = TestProbe()
     val master = system.actorOf(Props(classOf[Master], config, listener.ref))
     listener.expectMsg(Started)
@@ -41,7 +42,7 @@ with BeforeAndAfterAll {
       expectMsg(Started)
     }
     "store new tasks" in {
-      val (master, _) = initMaster()
+      val (master, _) = initMaster(config)
       val values = Set(Uri("http://test1.test"), Uri("http://test2.test"))
       master ! new NewTasks(values.toSeq)
       master ! new PullWork(2)
@@ -50,7 +51,7 @@ with BeforeAndAfterAll {
       }
     }
     "send only the number of tasks requested" in {
-      val (master, _) = initMaster()
+      val (master, _) = initMaster(config)
       val values = Seq(Uri("http://test1.test"), Uri("http://test2.test"))
       master ! new NewTasks(values)
       master ! new PullWork(1)
@@ -59,39 +60,40 @@ with BeforeAndAfterAll {
       }
     }
     "do not send work if there are not tasks to do" in {
-      val (master, _) = initMaster()
+      val (master, _) = initMaster(config)
       master ! PullWork(1)
       expectNoMsg()
     }
     "store links of a new task and set it as completed" in {
-      val (master, _) = initMaster()
+      val (master, _) = initMaster(config)
       val completedTask = Uri("http://test1.test")
       val childTasks = Set(Uri("http://test2.test"), Uri("http://test3.test"))
       master ! new NewTasks(Seq(completedTask))
       master ! new PullWork(1)
-      expectMsgPF() {
+      expectMsgPF(150.seconds) {
         case Work(Seq(Task(_, `completedTask`, 0))) => Unit
       }
       master ! new Result(new Task(Master.generateId(completedTask), completedTask, 0), childTasks.toSeq)
       master ! new PullWork(2)
 
       //Check that the Uris and depth are the expected
-      expectMsgPF() {
+      expectMsgPF(150.seconds) {
         case Work(tasks) if tasks.map(_.url).forall(childTasks.contains) && tasks.forall(_.depth == 1) => Unit
       }
     }
     "not store links of unknown task" in {
-      val (master, _) = initMaster()
+      val (master, _) = initMaster(config)
       val unknownTask = Uri("http://unknown.test")
-      val firstTask = Uri("http://task.test")
+      val firstTask = new Task(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
       val values = Seq(Uri("http://test2.test"), Uri("http://test3.test"))
-      master ! new NewTasks(Seq(firstTask))
+      master ! new NewTasks(Seq(firstTask.url))
       master ! new Result(new Task(Master.generateId(unknownTask), unknownTask, 0), values)
       master ! new PullWork(2)
-      expectMsgPF() {
-        case Work(Seq(Task(_, `firstTask`, 0))) => Unit
+      expectMsgPF(150.seconds) {
+        case Work(Seq(`firstTask`)) => Unit
       }
       master ! new PullWork(2)
+      master ! new Result(firstTask, Seq())
       expectNoMsg()
     }
     "send a Finished message to listener when all the tasks are done" in {
@@ -117,6 +119,17 @@ with BeforeAndAfterAll {
       master ! new Error(task, exception)
       val status = master.underlyingActor.asInstanceOf[MockMaster].storage.get(task.id).get._2
       status should be(Master.WithError(exception))
+    }
+    "restart running tasks after a timeout" in {
+      val (master, _) = initMaster(config)
+      val probe = TestProbe()
+      val task = new Task(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
+      probe.send(master, new NewTasks(Seq(task.url)))
+      probe.send(master, new PullWork(1))
+      probe.expectMsg(new Work(Seq(task)))
+      Thread.sleep(config.getInt("prototype.master.retry-timeout"))
+      probe.send(master, new PullWork(1))
+      probe.expectMsg(new Work(Seq(task)))
     }
   }
 }

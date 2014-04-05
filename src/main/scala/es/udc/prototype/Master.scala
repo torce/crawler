@@ -18,7 +18,7 @@ object Master {
 
   case object New extends TaskStatus
 
-  case object InProgress extends TaskStatus
+  case class InProgress(started: Long = System.currentTimeMillis()) extends TaskStatus
 
   case object Completed extends TaskStatus
 
@@ -37,39 +37,38 @@ class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging
   protected var newTasks: Int = 0
   protected var completedTasks = 0
 
+  val retryTimeout = config.getInt("prototype.master.retry-timeout")
+
   override def preStart() {
     log.info("Sending Started message to the listener")
     listener ! Started
   }
 
-  def getNewTasks(size: Int): Option[Seq[Task]] = {
-    var newSize = size
+  def getTasks(size: Int): Seq[Task] = {
     var tasks = Seq[Task]()
-    if (size > newTasks)
-      newSize = newTasks
-    if (newSize > 0) {
+    if (size > 0) {
       var tasksAdded = 0
       for ((id, (task, status)) <- taskStorage
-           if status == New
-           if tasksAdded < newSize) {
-        taskStorage.put(task.id, (task, InProgress))
+           if status == New || (status.isInstanceOf[InProgress] && (status.asInstanceOf[InProgress].started < (System.currentTimeMillis() - retryTimeout)))
+           if tasksAdded < size) {
+        taskStorage.put(id, (task, new InProgress(System.currentTimeMillis())))
         newTasks -= 1
         tasks = task +: tasks
         tasksAdded += 1
       }
-      Some(tasks)
+      tasks
     } else {
-      None
+      Seq()
     }
   }
 
   def storeCompleted(task: Task, status: TaskStatus) = {
-    if (taskStorage.get(task.id) == Some((task, InProgress))) {
-      taskStorage.put(task.id, (task, status))
-      completedTasks += 1
-      true
-    } else {
-      false
+    taskStorage.get(task.id) match {
+      case Some((`task`, InProgress(_))) =>
+        taskStorage.put(task.id, (task, status))
+        completedTasks += 1
+        true
+      case _ => false
     }
   }
 
@@ -109,12 +108,12 @@ class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging
       log.info(s"Received Result from ${sender.path} of ${task.id}: $links")
       storeResult(task, links)
     case PullWork(size) =>
-      getNewTasks(size) match {
-        case Some(tasks) =>
-          log.info(s"Received PullWork from manager ${sender.path}, sending ${tasks.size} tasks")
-          sender ! Work(tasks)
-        case None =>
-          log.info(s"Received PullWork from manager ${sender.path}, no work to send")
+      val tasks = getTasks(size)
+      if (tasks.isEmpty) {
+        log.info(s"Received PullWork from manager ${sender.path}, no work to send")
+      } else {
+        log.info(s"Received PullWork from manager ${sender.path}, sending ${tasks.size} tasks")
+        sender ! Work(tasks)
       }
     case NewTasks(links) =>
       log.info(s"Received NewTasks from ${sender.path}: $links")

@@ -11,7 +11,6 @@ import scala.language.postfixOps
 import es.udc.prototype.test.util.SpyLinkExtractor
 import akka.io.Tcp.Bound
 import spray.http.Uri
-import scala.concurrent.duration._
 
 /**
  * User: david
@@ -73,11 +72,11 @@ with BeforeAndAfterAll {
 
       system.actorOf(Props(classOf[Manager], config, self), "manager")
 
-      expectMsg(150.seconds, Started)
+      expectMsg(Started)
       system.actorSelection("/user/manager/master-proxy") ! new NewTasks(Seq(makeUrl("/")))
 
 
-      expectMsgPF(150.seconds) {
+      expectMsgPF() {
         case Finished => SpyLinkExtractor.visitedPaths should be(expected)
       }
     }
