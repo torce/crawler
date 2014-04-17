@@ -16,11 +16,11 @@ import spray.http.StatusCodes
 
 class MockRequestFilter extends RequestFilter {
   override def handleRequest(r: Request) = {
-    new Request(new Task("handled", r.task.url, 0), r.headers)
+    Some(new Request(new Task("handled", r.task.url, 0), r.headers))
   }
 
-  override def handleResponse(r: Response): Response = {
-    new Response(new Task("handled", r.task.url, 0), StatusCodes.OK, r.headers, r.body)
+  override def handleResponse(r: Response) = {
+    Some(new Response(new Task("handled", r.task.url, 0), StatusCodes.OK, r.headers, r.body))
   }
 }
 

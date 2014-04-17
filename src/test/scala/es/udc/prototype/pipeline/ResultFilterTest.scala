@@ -15,12 +15,12 @@ import spray.http.StatusCodes
  */
 
 class MockResultFilter extends ResultFilter {
-  override def handleResponse(r: Response): Response = {
-    new Response(new Task("handled", r.task.url, 0), StatusCodes.OK, r.headers, r.body)
+  override def handleResponse(r: Response) = {
+    Some(new Response(new Task("handled", r.task.url, 0), StatusCodes.OK, r.headers, r.body))
   }
 
-  override def handleResult(r: Result): Result = {
-    new Result(new Task("handled", r.task.url, 0), r.links)
+  override def handleResult(r: Result) = {
+    Some(new Result(new Task("handled", r.task.url, 0), r.links))
   }
 }
 

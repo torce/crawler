@@ -12,12 +12,12 @@ class MaxDepthFilter(config: Config) extends ResultFilter {
 
   val maxDepth = config.getInt("prototype.max-depth-filter.max-depth")
 
-  override def handleResponse(r: Response): Response = r
+  override def handleResponse(r: Response) = Some(r)
 
-  override def handleResult(r: Result): Result = {
+  override def handleResult(r: Result) = {
     if (r.task.depth >= maxDepth)
-      new Result(r.task, Seq())
+      Some(new Result(r.task, Seq()))
     else
-      r
+      Some(r)
   }
 }

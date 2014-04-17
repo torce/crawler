@@ -8,14 +8,20 @@ import es.udc.prototype.{Response, Request}
  * Time: 14:39
  */
 trait RequestFilter extends Stage {
-  def handleRequest(request: Request): Request
+  def handleRequest(request: Request): Option[Request]
 
-  def handleResponse(response: Response): Response
+  def handleResponse(response: Response): Option[Response]
 
   override def active = {
     case request: Request =>
-      right ! handleRequest(request)
+      handleRequest(request) match {
+        case Some(r) => right ! r
+        case None =>
+      }
     case response: Response =>
-      left ! handleResponse(response)
+      handleResponse(response) match {
+        case Some(r) => left ! r
+        case None =>
+      }
   }
 }
