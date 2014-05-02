@@ -17,7 +17,6 @@ import spray.http.Uri
  * Date: 14/02/14
  * Time: 14:57
  */
-
 object NodeTestServer {
   val host = "localhost"
   val port = 5555
@@ -34,12 +33,12 @@ class NodeTestServer extends Actor with HttpService {
       path("resource") {
         complete(NodeTestServer.resource)
       } ~
-      path("stuff") {
-        complete(NodeTestServer.stuff)
-      } ~
-      pathSingleSlash {
-        complete(NodeTestServer.root)
-      }
+        path("stuff") {
+          complete(NodeTestServer.stuff)
+        } ~
+        pathSingleSlash {
+          complete(NodeTestServer.root)
+        }
     }
   }
 
@@ -56,7 +55,11 @@ with BeforeAndAfterAll {
   //Init the test server
   val server = system.actorOf(Props[NodeTestServer])
   IO(Http) ! Http.Bind(server, NodeTestServer.host, NodeTestServer.port)
-  ignoreMsg { case Bound(_) => true } //Ignore the Bound message
+  expectMsgPF() {
+    case Bound(_) => true
+  }
+
+  //Ignore the Bound message
 
   override def afterAll() {
     system.shutdown()

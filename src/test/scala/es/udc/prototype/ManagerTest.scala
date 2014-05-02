@@ -10,6 +10,7 @@ import scala.Some
 import akka.actor.Identify
 import es.udc.prototype.pipeline.{PipelineRestarting, PipelineStarted, ToLeft, ToRight}
 import spray.http.{StatusCodes, Uri}
+import es.udc.prototype.master.DefaultTask
 
 /**
  * User: david
@@ -115,7 +116,7 @@ with BeforeAndAfterAll {
     "send work to downloader through the request pipeline one by one in any order" in {
       val (manager, _, downloader, _, requestPipeline, _) = initManagerActive(CONFIG)
 
-      val tasks = Set(new Task("id1", "url1", 0), new Task("id2", "url2", 0))
+      val tasks = Set[Task](new DefaultTask("id1", "url1", 0), new DefaultTask("id2", "url2", 0))
 
       manager ! new Work(tasks.toSeq)
 
@@ -132,7 +133,7 @@ with BeforeAndAfterAll {
     "request more work to master when empty" in {
       val (manager, master, _, _, _, _) = initManagerActive(CONFIG)
 
-      manager ! new Work(Seq(new Task("id", "url", 0)))
+      manager ! new Work(Seq(new DefaultTask("id", "url", 0)))
       master.expectMsg(new PullWork(BATCH_SIZE))
     }
     "retry requests to master after a timeout" in {
@@ -144,7 +145,7 @@ with BeforeAndAfterAll {
     }
     "forward Result messages to master through the result pipeline" in {
       val (manager, master, _, crawler, _, resultPipeline) = initManagerActive(CONFIG)
-      val msg = new Result(new Task("id", "url", 0), Seq("1"))
+      val msg = new Result(new DefaultTask("id", "url", 0), Seq("1"))
 
       crawler.send(manager, msg)
       resultPipeline.expectMsg(ToLeft(msg))
@@ -155,7 +156,7 @@ with BeforeAndAfterAll {
     }
     "forward Error messages from anywhere to master" in {
       val (manager, master, _, _, _, _) = initManagerActive(CONFIG)
-      val msg = new Error(new Task("id", "url", 0), new Exception)
+      val msg = new Error(new DefaultTask("id", "url", 0), new Exception)
 
       manager ! msg
 
@@ -165,7 +166,7 @@ with BeforeAndAfterAll {
     }
     "forward Response messages from downloader to crawler through the request and the result pipeline" in {
       val (manager, _, downloader, crawler, requestPipeline, resultPipeline) = initManagerActive(CONFIG)
-      val msg = new Response(new Task("id", "url", 0), StatusCodes.OK, Map(), "body")
+      val msg = new Response(new DefaultTask("id", "url", 0), StatusCodes.OK, Map(), "body")
 
       downloader.send(manager, msg)
 
@@ -176,7 +177,7 @@ with BeforeAndAfterAll {
     }
     "forward Request messages to crawler through the request pipeline" in {
       val (manager, master, downloader, crawler, requestPipeline, resultPipeline) = initManagerActive(CONFIG)
-      val msg = new Request(new Task("id", "url", 0), Map())
+      val msg = new Request(new DefaultTask("id", "url", 0), Map())
 
       master.expectMsg(new PullWork(BATCH_SIZE)) //The initial work request
       master.send(manager, new Work(Seq(msg.task)))
@@ -232,7 +233,7 @@ with BeforeAndAfterAll {
     }
     "store the work sent by master when none of the pipelines is initialized" in {
       val (manager, master, _, _, requestPipe, _) = initManagerCreated(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
 
       master.send(manager, new Work(Seq(task)))
       requestPipe.send(manager, PipelineStarted)
@@ -240,7 +241,7 @@ with BeforeAndAfterAll {
     }
     "store the work sent by master when the request pipeline is not ready" in {
       val (manager, master, _, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
       resultPipe.send(manager, PipelineStarted)
 
       master.send(manager, new Work(Seq(task)))
@@ -249,7 +250,7 @@ with BeforeAndAfterAll {
     }
     "store the work sent by master when the result pipeline is not ready" in {
       val (manager, master, downloader, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
       requestPipe.send(manager, PipelineStarted)
 
       master.send(manager, new Work(Seq(task)))
@@ -264,7 +265,7 @@ with BeforeAndAfterAll {
     }
     "store the responses sent by the downloader when the request pipeline is not ready" in {
       val (manager, _, downloader, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
       resultPipe.send(manager, PipelineStarted)
 
       downloader.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
@@ -273,7 +274,7 @@ with BeforeAndAfterAll {
     }
     "store the responses sent by the request pipeline when the result pipeline is not ready" in {
       val (manager, _, _, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
       requestPipe.send(manager, PipelineStarted)
 
       requestPipe.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
@@ -282,7 +283,7 @@ with BeforeAndAfterAll {
     }
     "store the results sent by the crawler when the result pipeline is not ready" in {
       val (manager, _, _, crawler, requestPipe, resultPipe) = initManagerCreated(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
       requestPipe.send(manager, PipelineStarted)
 
       crawler.send(manager, new Result(task, Seq()))
@@ -291,7 +292,7 @@ with BeforeAndAfterAll {
     }
     "store the work sent by master when the request pipeline is restarting" in {
       val (manager, master, _, _, requestPipe, _) = initManagerActive(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
 
       requestPipe.send(manager, PipelineRestarting)
       master.send(manager, new Work(Seq(task)))
@@ -301,7 +302,7 @@ with BeforeAndAfterAll {
     }
     "store the work sent by master when the result pipeline is restarting" in {
       val (manager, master, downloader, _, requestPipe, resultPipe) = initManagerActive(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
 
       resultPipe.send(manager, PipelineRestarting)
       master.send(manager, new Work(Seq(task)))
@@ -316,7 +317,7 @@ with BeforeAndAfterAll {
     }
     "store the responses sent by the downloader when the request pipeline is restarting" in {
       val (manager, _, downloader, _, requestPipe, resultPipe) = initManagerActive(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
 
       resultPipe.send(manager, PipelineRestarting)
       downloader.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
@@ -325,7 +326,7 @@ with BeforeAndAfterAll {
     }
     "store the responses sent by the request pipeline when the result pipeline is restarting" in {
       val (manager, _, _, _, requestPipe, resultPipe) = initManagerActive(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
 
       resultPipe.send(manager, PipelineRestarting)
       requestPipe.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
@@ -334,7 +335,7 @@ with BeforeAndAfterAll {
     }
     "store the results sent by the crawler when the result pipeline is restarting" in {
       val (manager, _, _, crawler, _, resultPipe) = initManagerActive(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
 
       resultPipe.send(manager, PipelineRestarting)
       crawler.send(manager, new Result(task, Seq()))
@@ -343,7 +344,7 @@ with BeforeAndAfterAll {
     }
     "store the responses sent by the downloader when none of the pipelines is ready" in {
       val (manager, _, downloader, _, requestPipe, _) = initManagerCreated(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
 
       downloader.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
       requestPipe.send(manager, PipelineStarted)
@@ -351,7 +352,7 @@ with BeforeAndAfterAll {
     }
     "store the results sent by the crawler when none of the pipelines is ready" in {
       val (manager, _, _, crawler, _, resultPipe) = initManagerCreated(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
 
       crawler.send(manager, new Result(task, Seq()))
       resultPipe.send(manager, PipelineStarted)
@@ -359,7 +360,7 @@ with BeforeAndAfterAll {
     }
     "return to the initial state if both pipelines are restarting" in {
       val (manager, master, downloader, crawler, requestPipe, resultPipe) = initManagerActive(CONFIG)
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
 
       requestPipe.send(manager, PipelineRestarting)
       resultPipe.send(manager, PipelineRestarting)

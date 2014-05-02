@@ -4,8 +4,9 @@ import akka.testkit.{TestActorRef, ImplicitSender, TestKit}
 import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
 import org.scalatest._
-import es.udc.prototype.{Result, Task, Response}
+import es.udc.prototype.{Result, Response}
 import spray.http.StatusCode.int2StatusCode
+import es.udc.prototype.master.DefaultTask
 
 /**
  * User: david
@@ -35,11 +36,11 @@ with BeforeAndAfterAll {
 
   "A Crawler" should {
     "extract information and return a Result with the extracted links" in {
-      val testResponse = new Response(new Task("id", "url", 0), int2StatusCode(200), Map(), "body")
+      val testResponse = new Response(new DefaultTask("id", "url", 0), int2StatusCode(200), Map(), "body")
 
       val crawler = TestActorRef(new MockExtractor)
       crawler ! testResponse
-      expectMsg(new Result(new Task("id", "url", 0), Seq("1", "2")))
+      expectMsg(new Result(new DefaultTask("id", "url", 0), Seq("1", "2")))
       crawler.underlyingActor.informationExtracted should be(1)
     }
   }

@@ -4,8 +4,9 @@ import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import akka.testkit.{TestProbe, ImplicitSender, TestKit}
 import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
-import es.udc.prototype.{Task, Result}
+import es.udc.prototype.Result
 import spray.http.Uri
+import es.udc.prototype.master.DefaultTask
 
 /**
  * User: david
@@ -42,20 +43,20 @@ with BeforeAndAfterAll {
       val links = Seq(Uri("http://test.test"), Uri("http://es.test"))
 
       //Equal
-      listener.send(maxDepth, new Result(new Task("id", Uri.Empty, 1), links))
-      listener.expectMsg(new Result(new Task("id", Uri.Empty, 1), Seq()))
+      listener.send(maxDepth, new Result(new DefaultTask("id", Uri.Empty, 1), links))
+      listener.expectMsg(new Result(new DefaultTask("id", Uri.Empty, 1), Seq()))
 
       //Greater than
-      listener.send(maxDepth, new Result(new Task("id", Uri.Empty, 2), links))
-      listener.expectMsg(new Result(new Task("id", Uri.Empty, 2), Seq()))
+      listener.send(maxDepth, new Result(new DefaultTask("id", Uri.Empty, 2), links))
+      listener.expectMsg(new Result(new DefaultTask("id", Uri.Empty, 2), Seq()))
     }
     "not modify links in Results with depth below the max depth" in {
       val (maxDepth, listener) = initMaxDepth()
 
       val links = Seq(Uri("http://test.test"), Uri("http://es.test"))
 
-      listener.send(maxDepth, new Result(new Task("id", Uri.Empty, 0), links))
-      listener.expectMsg(new Result(new Task("id", Uri.Empty, 0), links))
+      listener.send(maxDepth, new Result(new DefaultTask("id", Uri.Empty, 0), links))
+      listener.expectMsg(new Result(new DefaultTask("id", Uri.Empty, 0), links))
     }
   }
 }

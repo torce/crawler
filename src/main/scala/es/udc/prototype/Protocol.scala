@@ -7,8 +7,6 @@ import spray.http.{StatusCode, Uri}
  * Date: 12/02/14
  * Time: 21:09
  */
-//Not a message
-case class Task(id: String, url: Uri, depth: Int)
 
 //? -> Master
 case class NewTasks(links: Seq[Uri])

@@ -5,8 +5,9 @@ import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import scala.collection.JavaConversions._
-import es.udc.prototype.{Request, Task, Response}
+import es.udc.prototype.{Request, Response}
 import spray.http.{StatusCode, Uri}
+import es.udc.prototype.master.DefaultTask
 
 class FilterHttpErrorTest extends TestKit(ActorSystem("test-system", ConfigFactory.load("application.test.conf")))
 with ImplicitSender
@@ -35,7 +36,7 @@ with BeforeAndAfterAll {
       val (httpFilter, listener) = initFilterHttp()
       errors.foreach {
         e =>
-          listener.send(httpFilter, new Response(new Task("id", Uri.Empty, 0), StatusCode.int2StatusCode(e), Map(), ""))
+          listener.send(httpFilter, new Response(new DefaultTask("id", Uri.Empty, 0), StatusCode.int2StatusCode(e), Map(), ""))
           listener.expectNoMsg()
       }
     }
@@ -43,14 +44,14 @@ with BeforeAndAfterAll {
       val (httpFilter, listener) = initFilterHttp()
       allowed.foreach {
         e =>
-          val response = new Response(new Task("id", Uri.Empty, 0), StatusCode.int2StatusCode(e), Map(), "")
-          listener.send(httpFilter, new Response(new Task("id", Uri.Empty, 0), StatusCode.int2StatusCode(e), Map(), ""))
+          val response = new Response(new DefaultTask("id", Uri.Empty, 0), StatusCode.int2StatusCode(e), Map(), "")
+          listener.send(httpFilter, new Response(new DefaultTask("id", Uri.Empty, 0), StatusCode.int2StatusCode(e), Map(), ""))
           listener.expectMsg(response)
       }
     }
     "do not modify the Requests" in {
       val (httpFilter, listener) = initFilterHttp()
-      val request = new Request(new Task("id", Uri.Empty, 0), Map())
+      val request = new Request(new DefaultTask("id", Uri.Empty, 0), Map())
       listener.send(httpFilter, request)
       listener.expectMsg(request)
     }

@@ -239,7 +239,7 @@ with FSM[ManagerState, ManagerData] {
   when(Active, stateTimeout = retryTimeout)(fromMaster orElse fromSelf orElse fromDownloader orElse
     fromRequestPipeline orElse fromResultPipeline orElse fromCrawler orElse errorHandler orElse {
     case Event(StateTimeout, ManagerData(Queue(), _, _, _)) =>
-      log.info(s"Received StateTimeout. Requesting work from Master")
+      log.debug(s"Received StateTimeout. Requesting work from Master")
       master ! new PullWork(batchSize)
       stay()
 

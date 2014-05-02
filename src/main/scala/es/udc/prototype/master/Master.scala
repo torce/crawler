@@ -1,10 +1,17 @@
-package es.udc.prototype
+package es.udc.prototype.master
 
 import akka.actor.{ActorLogging, ActorRef, Actor}
 import scala.collection.mutable.{Map => MMap}
 import com.typesafe.config.Config
 import spray.http.Uri
-import es.udc.prototype.Master.TaskStatus
+import es.udc.prototype._
+import scala.Some
+import es.udc.prototype.NewTasks
+import es.udc.prototype.Result
+import es.udc.prototype.Work
+import es.udc.prototype.PullWork
+import es.udc.prototype.Task
+import es.udc.prototype.master.Master.TaskStatus
 
 /**
  * User: david
@@ -22,12 +29,14 @@ object Master {
 
   case object Completed extends TaskStatus
 
-  case class WithError(e: Throwable) extends TaskStatus
+  case class WithError(e: String) extends TaskStatus
 
   def generateId(url: Uri): String = {
     url.toString()
   }
 }
+
+case class DefaultTask(id: String, url: Uri, depth: Int) extends Task
 
 class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging {
   protected val taskStorage: MMap[String, (Task, TaskStatus)] = MMap()
@@ -87,7 +96,7 @@ class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging
   }
 
   def storeError(task: Task, reason: Throwable) {
-    if (storeCompleted(task, new WithError(reason))) {
+    if (storeCompleted(task, new WithError(reason.toString))) {
       notifyIfCompleted()
     }
   }
@@ -97,7 +106,7 @@ class Master(config: Config, listener: ActorRef) extends Actor with ActorLogging
       link =>
         if (!taskStorage.contains(Master.generateId(link))) {
           val id = Master.generateId(link)
-          taskStorage.put(id, (new Task(id, link, depth), New))
+          taskStorage.put(id, (new DefaultTask(id, link, depth), New))
           newTasks += 1
         }
     }

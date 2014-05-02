@@ -5,8 +5,9 @@ import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import scala.collection.JavaConversions._
-import es.udc.prototype.{Task, Request, Response}
+import es.udc.prototype.{Request, Response}
 import spray.http.{StatusCode, Uri}
+import es.udc.prototype.master.DefaultTask
 
 class RetryHttpErrorTest extends TestKit(ActorSystem("test-system", ConfigFactory.load("application.test.conf")))
 with ImplicitSender
@@ -35,7 +36,7 @@ with BeforeAndAfterAll {
   "A RetryHttpErrorStage" should {
     "retry the configured http errors, sending again the Request" in {
       val (retry, left, right) = initRetry()
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
       errors.foreach {
         e =>
           left.send(retry, new Request(task, Map()))
@@ -47,7 +48,7 @@ with BeforeAndAfterAll {
 
     "allow the rest of the error codes" in {
       val (retry, left, right) = initRetry()
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
       allowed.foreach {
         e =>
           left.send(retry, new Request(task, Map()))
@@ -59,7 +60,7 @@ with BeforeAndAfterAll {
 
     "drop unknown Responses, it should be restarted later" in {
       val (retry, left, right) = initRetry()
-      val task = new Task("id", Uri.Empty, 0)
+      val task = new DefaultTask("id", Uri.Empty, 0)
       right.send(retry, new Response(task, 200, Map(), ""))
       left.expectNoMsg()
     }

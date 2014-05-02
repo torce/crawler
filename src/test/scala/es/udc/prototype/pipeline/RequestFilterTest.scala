@@ -4,9 +4,10 @@ import akka.testkit.{TestProbe, ImplicitSender, TestKit}
 import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
-import es.udc.prototype.{Task, Response, Request}
+import es.udc.prototype.{Response, Request}
 import spray.http.Uri.Empty
 import spray.http.StatusCodes
+import es.udc.prototype.master.DefaultTask
 
 /**
  * User: david
@@ -16,11 +17,11 @@ import spray.http.StatusCodes
 
 class MockRequestFilter extends RequestFilter {
   override def handleRequest(r: Request) = {
-    Some(new Request(new Task("handled", r.task.url, 0), r.headers))
+    Some(new Request(new DefaultTask("handled", r.task.url, 0), r.headers))
   }
 
   override def handleResponse(r: Response) = {
-    Some(new Response(new Task("handled", r.task.url, 0), StatusCodes.OK, r.headers, r.body))
+    Some(new Response(new DefaultTask("handled", r.task.url, 0), StatusCodes.OK, r.headers, r.body))
   }
 }
 
@@ -48,16 +49,16 @@ with BeforeAndAfterAll {
   "A RequestFilter" should {
     "apply filter to request and send it to right" in {
       val (filter, _, right) = initFilter()
-      val input = new Request(new Task("unhandled", Empty, 0), Map())
-      val expected = new Request(new Task("handled", Empty, 0), Map())
+      val input = new Request(new DefaultTask("unhandled", Empty, 0), Map())
+      val expected = new Request(new DefaultTask("handled", Empty, 0), Map())
 
       filter ! input
       right.expectMsg(expected)
     }
     "apply filter to response and send it to left" in {
       val (filter, left, _) = initFilter()
-      val input = new Response(new Task("unhandled", Empty, 0), StatusCodes.OK, Map(), "body")
-      val expected = new Response(new Task("handled", Empty, 0), StatusCodes.OK, Map(), "body")
+      val input = new Response(new DefaultTask("unhandled", Empty, 0), StatusCodes.OK, Map(), "body")
+      val expected = new Response(new DefaultTask("handled", Empty, 0), StatusCodes.OK, Map(), "body")
 
       filter ! input
       left.expectMsg(expected)

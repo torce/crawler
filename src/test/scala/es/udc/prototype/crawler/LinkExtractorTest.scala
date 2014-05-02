@@ -5,7 +5,8 @@ import spray.http.Uri
 import akka.testkit.{TestKit, TestActorRef}
 import akka.actor.ActorSystem
 import com.typesafe.config.ConfigFactory
-import es.udc.prototype.{Task, Response}
+import es.udc.prototype.Response
+import es.udc.prototype.master.DefaultTask
 
 /**
  * User: david
@@ -15,7 +16,7 @@ import es.udc.prototype.{Task, Response}
 class LinkExtractorTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("application.test.conf")))
 with WordSpecLike with Matchers {
 
-  def makeResponse(base: Uri, body: String) = new Response(new Task("", base, 0), 200, Map(), body)
+  def makeResponse(base: Uri, body: String) = new Response(new DefaultTask("", base, 0), 200, Map(), body)
 
   def initExtractor = TestActorRef(new LinkExtractor).underlyingActor
 

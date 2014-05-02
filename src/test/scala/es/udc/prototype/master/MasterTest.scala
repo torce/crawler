@@ -1,4 +1,4 @@
-package es.udc.prototype
+package es.udc.prototype.master
 
 import akka.actor.{ActorRef, Props, ActorSystem}
 import akka.testkit.{TestActorRef, TestProbe, ImplicitSender, TestKit}
@@ -6,7 +6,12 @@ import org.scalatest.{WordSpecLike, BeforeAndAfterAll, Matchers}
 import com.typesafe.config.{Config, ConfigFactory}
 import spray.http.Uri
 import scala.collection.mutable.{Map => MMap}
-import scala.concurrent.duration._
+import es.udc.prototype._
+import es.udc.prototype.NewTasks
+import es.udc.prototype.Result
+import es.udc.prototype.Work
+import es.udc.prototype.PullWork
+import es.udc.prototype.Error
 
 /**
  * User: david
@@ -70,26 +75,26 @@ with BeforeAndAfterAll {
       val childTasks = Set(Uri("http://test2.test"), Uri("http://test3.test"))
       master ! new NewTasks(Seq(completedTask))
       master ! new PullWork(1)
-      expectMsgPF(150.seconds) {
+      expectMsgPF() {
         case Work(Seq(Task(_, `completedTask`, 0))) => Unit
       }
-      master ! new Result(new Task(Master.generateId(completedTask), completedTask, 0), childTasks.toSeq)
+      master ! new Result(new DefaultTask(Master.generateId(completedTask), completedTask, 0), childTasks.toSeq)
       master ! new PullWork(2)
 
       //Check that the Uris and depth are the expected
-      expectMsgPF(150.seconds) {
+      expectMsgPF() {
         case Work(tasks) if tasks.map(_.url).forall(childTasks.contains) && tasks.forall(_.depth == 1) => Unit
       }
     }
     "not store links of unknown task" in {
       val (master, _) = initMaster(config)
       val unknownTask = Uri("http://unknown.test")
-      val firstTask = new Task(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
+      val firstTask = new DefaultTask(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
       val values = Seq(Uri("http://test2.test"), Uri("http://test3.test"))
       master ! new NewTasks(Seq(firstTask.url))
-      master ! new Result(new Task(Master.generateId(unknownTask), unknownTask, 0), values)
+      master ! new Result(new DefaultTask(Master.generateId(unknownTask), unknownTask, 0), values)
       master ! new PullWork(2)
-      expectMsgPF(150.seconds) {
+      expectMsgPF() {
         case Work(Seq(`firstTask`)) => Unit
       }
       master ! new PullWork(2)
@@ -98,7 +103,7 @@ with BeforeAndAfterAll {
     }
     "send a Finished message to listener when all the tasks are done" in {
       val master = system.actorOf(Props(classOf[Master], config, self))
-      val task = new Task(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
+      val task = new DefaultTask(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
 
       expectMsg(Started)
 
@@ -112,18 +117,18 @@ with BeforeAndAfterAll {
     "store failures of in progress tasks" in {
       val master = TestActorRef(Props(classOf[MockMaster], config, self))
       expectMsg(Started)
-      val task = new Task(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
+      val task = new DefaultTask(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
       master ! new NewTasks(Seq(task.url))
       master ! new PullWork(1)
       val exception = new Exception
       master ! new Error(task, exception)
       val status = master.underlyingActor.asInstanceOf[MockMaster].storage.get(task.id).get._2
-      status should be(Master.WithError(exception))
+      status should be(Master.WithError(exception.toString))
     }
     "restart running tasks after a timeout" in {
       val (master, _) = initMaster(config)
       val probe = TestProbe()
-      val task = new Task(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
+      val task = new DefaultTask(Master.generateId(Uri("http://task.test")), Uri("http://task.test"), 0)
       probe.send(master, new NewTasks(Seq(task.url)))
       probe.send(master, new PullWork(1))
       probe.expectMsg(new Work(Seq(task)))

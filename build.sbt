@@ -4,7 +4,9 @@ name := "default"
 
 version := "0.1-SNAPSHOT"
 
-resolvers += "spray repo" at "http://repo.spray.io"
+resolvers ++= Seq(
+  "spray repo" at "http://repo.spray.io",
+  "sprouch repo" at "http://kimstebel.github.com/sprouch/repository")
 
 scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature")
 
@@ -16,6 +18,7 @@ libraryDependencies ++= Seq(
   "org.scalatest" %% "scalatest" % "2.0" % "test",
   "io.spray" % "spray-routing" % "1.2.0" % "test",
   "io.spray" % "spray-client" % "1.2.0",
+  "io.spray" %% "spray-json" % "1.2.6",
   "org.rogach" %% "scallop" % "0.9.5")
 
 atmosSettings
