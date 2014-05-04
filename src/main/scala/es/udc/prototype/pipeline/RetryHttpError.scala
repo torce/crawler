@@ -19,9 +19,9 @@ class RetryHttpError(config: Config) extends Stage with ActorLogging {
       requests.put(request.task.id, (request, 0))
       right ! request
     case response: Response =>
-      if (requests.contains(response.task.id)) {
-        val (prevRequest, retries) = requests(response.task.id)
-        if (toFilter.contains(response.status)) {
+      if (toFilter.contains(response.status)) {
+        if (requests.contains(response.task.id)) {
+          val (prevRequest, retries) = requests(response.task.id)
           if (retries < maxRetries) {
             log.info(s"Retrying request ${response.task.id} with code ${response.status}")
             right ! prevRequest
@@ -29,13 +29,15 @@ class RetryHttpError(config: Config) extends Stage with ActorLogging {
             log.warning(s"Max requests reached for response ${response.task.id}")
           }
         } else {
-          // Response code correct, pass to the next stage and clear from Map
-          requests.remove(response.task.id)
-          left ! response
+          // Unknown response, drop it
+          log.warning(s"Dropping an unknown response with id ${response.task.id}")
         }
       } else {
-        // Unknown response, drop it
-        log.warning(s"Dropping an unknown response with id ${response.task.id}")
+        // Response code correct, pass to the next stage and clear from Map if necessary
+        if (toFilter.contains(response.status)) {
+          requests.remove(response.task.id)
+        }
+        left ! response
       }
   }
 }

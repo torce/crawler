@@ -58,11 +58,24 @@ with BeforeAndAfterAll {
       }
     }
 
-    "drop unknown Responses, it should be restarted later" in {
+    "drop unknown Responses with the configured error codes, it should be restarted later" in {
       val (retry, left, right) = initRetry()
       val task = new DefaultTask("id", Uri.Empty, 0)
-      right.send(retry, new Response(task, 200, Map(), ""))
-      left.expectNoMsg()
+      errors.foreach {
+        e =>
+          right.send(retry, new Response(task, StatusCode.int2StatusCode(e), Map(), ""))
+          left.expectNoMsg()
+      }
+    }
+
+    "allow unknown Responses if the error code is not among the error codes to drop" in {
+      val (retry, left, right) = initRetry()
+      val task = new DefaultTask("id", Uri.Empty, 0)
+      allowed.foreach {
+        e =>
+          right.send(retry, new Response(task, StatusCode.int2StatusCode(e), Map(), ""))
+          left.expectMsg(new Response(task, StatusCode.int2StatusCode(e), Map(), ""))
+      }
     }
   }
 
