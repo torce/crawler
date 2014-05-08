@@ -67,7 +67,7 @@ class DownloaderTest
       val downloader = system.actorOf(Props[Downloader])
       val testUrl = makeUrl("/")
       downloader ! new Request(new DefaultTask("id", testUrl, 0), Map())
-      expectMsgPF(150.seconds) {
+      expectMsgPF() {
         case Response(Task("id", _, 0), StatusCodes.OK, _, TestServer.root) => Unit
       }
     }
@@ -75,7 +75,7 @@ class DownloaderTest
       val downloader = system.actorOf(Props[Downloader])
       val testUrl = makeUrl("/unexistent")
       downloader ! new Request(new DefaultTask("id", testUrl, 0), Map())
-      expectMsgPF(150.seconds) {
+      expectMsgPF() {
         case Response(Task("id", _, 0), StatusCodes.NotFound, _, _) => Unit
       }
     }
@@ -83,7 +83,7 @@ class DownloaderTest
       val downloader = system.actorOf(Props[Downloader])
       val testUrl = makeUrl("/redirect")
       downloader ! new Request(new DefaultTask("id", testUrl, 0), Map())
-      expectMsgPF(150.seconds) {
+      expectMsgPF() {
         case Response(Task("id", _, 0), StatusCodes.OK, _, TestServer.root) => Unit
       }
     }
@@ -91,7 +91,7 @@ class DownloaderTest
       val downloader = system.actorOf(Props[Downloader])
       val testUrl = Uri("http://0.0.0.0:1")
       downloader ! new Request(new DefaultTask("id", testUrl, 0), Map())
-      expectMsgPF(150.seconds) {
+      expectMsgPF() {
         case Error(Task("id", _, 0), _) => Unit
       }
     }
