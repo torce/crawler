@@ -16,7 +16,7 @@ import es.udc.prototype.master.DefaultTask
 class LinkExtractorTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("application.test.conf")))
 with WordSpecLike with Matchers {
 
-  def makeResponse(base: Uri, body: String) = new Response(new DefaultTask("", base, 0), 200, Map(), body)
+  def makeResponse(base: Uri, body: String) = new Response(new DefaultTask("", base, 0), 200, Map("Content-Type" -> "text/html"), body)
 
   def initExtractor = TestActorRef(new LinkExtractor).underlyingActor
 

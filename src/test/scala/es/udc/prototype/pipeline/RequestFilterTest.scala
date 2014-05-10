@@ -4,7 +4,7 @@ import akka.testkit.{TestProbe, ImplicitSender, TestKit}
 import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
-import es.udc.prototype.{Response, Request}
+import es.udc.prototype.{Error, Response, Request}
 import spray.http.Uri.Empty
 import spray.http.StatusCodes
 import es.udc.prototype.master.DefaultTask
@@ -62,6 +62,13 @@ with BeforeAndAfterAll {
 
       filter ! input
       left.expectMsg(expected)
+    }
+    "send all the error messages to the left" in {
+      val (filter, left, _) = initFilter()
+      val error = new Error(new DefaultTask("unhandled", Empty, 0), new Exception)
+
+      filter ! error
+      left.expectMsg(error)
     }
   }
 }

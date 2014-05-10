@@ -51,7 +51,7 @@ object RobotsParser {
       }
 
       if (!cleanLine.isEmpty) {
-        val pair = cleanLine.split(':')
+        val pair = cleanLine.split(":", 2)
         val (key, value) = pair.size match {
           case 2 => pair(0).toLowerCase -> URLDecoder.decode(pair(1).trim(), "UTF-8")
           case 1 => pair(0).toLowerCase -> ""

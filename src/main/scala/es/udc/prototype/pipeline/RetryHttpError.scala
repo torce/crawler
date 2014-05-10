@@ -1,6 +1,6 @@
 package es.udc.prototype.pipeline
 
-import es.udc.prototype.{Response, Request}
+import es.udc.prototype.{Response, Request, Error}
 import com.typesafe.config.Config
 import scala.collection.mutable.{Map => MMap}
 import spray.http.StatusCode
@@ -39,5 +39,7 @@ class RetryHttpError(config: Config) extends Stage with ActorLogging {
         }
         left ! response
       }
+    case error: Error =>
+      left ! error
   }
 }

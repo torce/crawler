@@ -11,6 +11,8 @@ import scala.language.postfixOps
 import es.udc.prototype.test.util.SpyLinkExtractor
 import akka.io.Tcp.Bound
 import spray.http.Uri
+import spray.http.HttpHeaders._
+import spray.http.MediaTypes._
 
 /**
  * User: david
@@ -20,7 +22,7 @@ import spray.http.Uri
 object NodeTestServer {
   val host = "localhost"
   val port = 5555
-  val root = "<html><body><a href=\""+makeUrl("/resource")+"\"></a><a href=\""+makeUrl("/stuff")+"\"></a> </body></html>"
+  val root = "<html><body><a href=\"" + makeUrl("/resource") + "\"></a><a href=\"" + makeUrl("/stuff") + "\"></a> </body></html>"
   val resource = "<html><body><p>resource</p></body></html>"
   val stuff = "<html><body><p>stuff</p></body></html>"
 
@@ -30,19 +32,22 @@ object NodeTestServer {
 class NodeTestServer extends Actor with HttpService {
   val route = {
     get {
-      path("resource") {
-        complete(NodeTestServer.resource)
-      } ~
-        path("stuff") {
-          complete(NodeTestServer.stuff)
+      respondWithMediaType(`text/html`) {
+        path("resource") {
+          complete(NodeTestServer.resource)
         } ~
-        pathSingleSlash {
-          complete(NodeTestServer.root)
-        }
+          path("stuff") {
+            complete(NodeTestServer.stuff)
+          } ~
+          pathSingleSlash {
+            complete(NodeTestServer.root)
+          }
+      }
     }
   }
 
   def actorRefFactory = context.system
+
   def receive = runRoute(route)
 }
 

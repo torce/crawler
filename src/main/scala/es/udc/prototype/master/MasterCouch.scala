@@ -7,7 +7,6 @@ import spray.http.Uri
 import es.udc.prototype.master.Master._
 import es.udc.prototype.Task
 import sprouch._
-import scala.util.Failure
 import es.udc.prototype.master.Master.InProgress
 import scala.Some
 import es.udc.prototype.NewTasks
@@ -17,9 +16,13 @@ import scala.util.Success
 import es.udc.prototype.PullWork
 import es.udc.prototype.master.Master.WithError
 import es.udc.prototype.master.MasterCouch.RevedCouchTask
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
 import CouchTaskJsonProtocol._
-import spray.json.JsNumber
+import scala.util.Failure
+import scala.concurrent.duration._
+import akka.remote.transport.ActorTransportAdapter
+import akka.pattern.AskTimeoutException
+import sun.misc.BASE64Encoder
 
 trait MasterCouchViews {
   val newTasks = MapReduce(map =
@@ -83,6 +86,8 @@ class MasterCouch(config: Config, listener: ActorRef) extends Actor with ActorLo
 
   val retryTimeout = config.getInt("prototype.master.retry-timeout")
 
+  implicit val queryTimeout = config.getInt("prototype.master.couch.query-timeout").milliseconds
+
   val userPass = try {
     Some((config.getString("prototype.master.couch.user"), config.getString("prototype.master.couch.pass")))
   } catch {
@@ -101,77 +106,126 @@ class MasterCouch(config: Config, listener: ActorRef) extends Actor with ActorLo
   val createDb = config.getBoolean("prototype.master.couch.create-db")
 
   implicit val db = if (createDb)
-    couch.createDb(config.getString("prototype.master.couch.db-name"))
+    couch.createDb(config.getString("prototype.master.couch.db-name")) recoverWith {
+      case _ => couch.getDb(config.getString("prototype.master.couch.db-name"))
+    }
   else
     couch.getDb(config.getString("prototype.master.couch.db-name"))
 
   if (createDb) {
-    NewDocument("crawler",
+    Some(NewDocument("crawler",
       Views(Map("new-tasks" -> newTasks,
         "started" -> started,
-        "remaining" -> remaining)).createViews)
+        "remaining" -> remaining))).createViews)
+  }
+
+  override def preStart() {
+    log.info("Sending Started message to the listener")
+    listener ! Started
   }
 
   def storeResult(task: RevedCouchTask, links: Seq[Uri]) {
-    (task.revDoc := task.revDoc.data.copy(status = Completed)).onFailure {
-      case _ =>
-        log.warning(s"Error storing completed task with id: ${task.id}")
-    } //Update the status
+    (task.revDoc := task.revDoc.data.copy(status = Completed)) recoverWith {
+      //Resolve update conflicts, overwrite status if it is New or WithError
+      case SprouchException(ErrorResponse(409, _)) =>
+        for {
+          updatedDoc <- task.revDoc.get
+        } yield {
+          if(updatedDoc.data.status != Completed) {
+            updatedDoc := task.revDoc.data.copy(status = Completed)
+          } else {
+            Future.successful(updatedDoc)
+          }
+        }
+      case e =>
+        log.warning(s"Error storing task completed with error with id: ${task.id} due to $e")
+        Future.failed(e)
+    }
     addNewTasks(links, task.depth + 1)
   }
 
   def storeError(task: RevedCouchTask, reason: Throwable) {
-    (task.revDoc := task.revDoc.data.copy(status = new WithError(reason.toString))).onFailure {
-      case _ => log.warning(s"Error storing task completed with error with id: ${task.id}")
+    (task.revDoc := task.revDoc.data.copy(status = new WithError(reason.toString))) recoverWith {
+      //Resolve update conflicts, overwrite status only if it is New
+      case SprouchException(ErrorResponse(409, _)) =>
+        for {
+          updatedDoc <- task.revDoc.get
+        } yield {
+          if(!updatedDoc.data.status.isInstanceOf[WithError] && updatedDoc.data.status != Completed) {
+            updatedDoc := task.revDoc.data.copy(status = new WithError(reason.toString))
+          }
+        }
+      case e =>
+        log.warning(s"Error storing task completed with error with id: ${task.id} due to $e")
+        Future.failed(e)
     }
   }
 
   def addNewTasks(links: Seq[Uri], depth: Int) {
-    links.foreach {
+    val docs = links.map {
       link =>
-        new NewCouchTask(link, depth, New).create.onFailure {
-          case e => log.warning(s"Error storing new task with url: $link")
+        NewDocument(encodeId(link),
+          new NewCouchTask(link, depth, New), Map())
+    }
+    db.flatMap(_.bulkPutWithError(docs)).onComplete {
+      case Success(result) =>
+        if(!result._2.isEmpty) {
+          log.debug(s"Error storing new tasks, already exists: ${result._2.map(_.id)}")
         }
+        notifyIfCompleted()
+      case Failure(e@SprouchException(ErrorResponse(code, Some(ErrorResponseBody(error, reason))))) =>
+        log.warning(s"$e: $code $error $reason")
+      case Failure(e) =>
+        log.error(s"$e: ${e.getMessage}")
     }
   }
 
-  def getNewTasks(size: Int): Future[Seq[RevedCouchTask]] = {
-    // Query the view
-    val query = queryView[String, Null]("crawler", "new-tasks", limit = Some(size),
-      flags = ViewQueryFlag(reduce = false, include_docs = true))
-
-    // Deserializer
-    val docs: Future[Seq[RevedCouchTask]] = query.map(_.rows.flatMap(_.docAs[RevedCouchTask]))
-
-    // Store with status InProgress and timestamp, get the new rev
-
-    docs.flatMap {
-      seq =>
-        val updatedTasks = seq.map {
-          task =>
-            (task.revDoc := task.revDoc.data.copy(status = new InProgress())).map(new RevedCouchTask(_))
-        }
-        Future.sequence(updatedTasks)
-    }
-  }
-
-  def getTasksToRetry(size: Int): Future[Seq[RevedCouchTask]] = {
-    import sprouch._, dsl._, JsonProtocol._
-    if (size > 0) {
-      val query = queryView[Double, Null]("crawler", "started", limit = Some(size),
-        startKey = Some(System.currentTimeMillis() - retryTimeout),
-        flags = ViewQueryFlag(reduce = false, include_docs = true, descending = true))
-
-      val docs = query.map(_.rows.flatMap(_.docAs[RevedCouchTask]))
-
-      val updateStatus = docs.map {
-        list =>
-          list.foreach(doc => doc.revDoc := doc.revDoc.data.copy(status = new InProgress()))
-          list
+  def conflictSolver(conflict: RevedCouchTask): PartialFunction[Throwable, Future[Option[RevedCouchTask]]] = {
+    case SprouchException(ErrorResponse(409, _)) =>
+      conflict.revDoc.get.flatMap {
+        updatedDoc =>
+          updatedDoc.data.status match {
+            case s if s == New || s.isInstanceOf[InProgress] =>
+              (updatedDoc := conflict.revDoc.data.copy(status = new InProgress())).map(t => Some(new RevedCouchTask(t)))
+            case s if s == Completed || s.isInstanceOf[WithError] =>
+              Future(None)
+          }
       }
-      updateStatus
+  }
+
+  def getTasks(size: Int): Future[Seq[RevedCouchTask]] = {
+    def getNewTasks(size: Int): Future[Seq[RevedCouchTask]] =
+      getTaskWitQuery(queryView[String, Null]("crawler", "new-tasks", limit = Some(size),
+        flags = ViewQueryFlag(reduce = false, include_docs = true)))
+
+    def getTasksToRetry(size: Int): Future[Seq[RevedCouchTask]] = if(size > 0) {
+      getTaskWitQuery(queryView[Double, Null]("crawler", "started", limit = Some(size),
+        startKey = Some(System.currentTimeMillis() - retryTimeout),
+        flags = ViewQueryFlag(reduce = false, include_docs = true, descending = true)))
     } else {
       Future(Seq())
+    }
+
+    for {
+      tasks <- getNewTasks(size)
+      tasksToRetry <- getTasksToRetry(size - tasks.size)
+    } yield {
+      tasks ++ tasksToRetry
+    }
+  }
+
+  def getTaskWitQuery(query: Future[ViewResponse[_,_]]): Future[Seq[RevedCouchTask]] = {
+    for {
+      results <- query
+      docs <- Future(
+        results.rows.flatMap(
+          _.docAs[RevedCouchTask]))
+      updatedTasks <- Future(docs.map(task =>
+        (task.revDoc := task.revDoc.data.copy(status = new InProgress()))
+          .map(t => Some(new RevedCouchTask(t))).recoverWith(conflictSolver(task))))
+      tasksToReturn <- Future.sequence(updatedTasks)
+    } yield {
+      tasksToReturn.flatten
     }
   }
 
@@ -191,20 +245,11 @@ class MasterCouch(config: Config, listener: ActorRef) extends Actor with ActorLo
 
   def receive = {
     case Result(task: RevedCouchTask, links) =>
-      log.info(s"Received Result from ${sender.path} of ${task.id}: $links")
+      log.info(s"Received Result from ${sender.path} of ${task.id}")
       storeResult(task, links)
-      notifyIfCompleted()
     case PullWork(size) =>
       val currentSender = sender
-
-      val f: Future[Seq[RevedCouchTask]] = for {
-        tasks <- getNewTasks(size)
-        toRetry <- getTasksToRetry(size - tasks.size)
-      } yield {
-        tasks ++ toRetry
-      }
-
-      f.onComplete {
+      getTasks(size).onComplete {
         case Success(tasks) =>
           if (tasks.isEmpty) {
             log.info(s"Received PullWork from manager ${currentSender.path}, no work to send")
@@ -213,7 +258,10 @@ class MasterCouch(config: Config, listener: ActorRef) extends Actor with ActorLo
             log.info(s"Received PullWork from manager ${currentSender.path}, sending ${tasks.size} tasks")
             currentSender ! Work(tasks)
           }
-        case Failure(e) => log.error(s"$e")
+        case Failure(e@SprouchException(ErrorResponse(code, Some(ErrorResponseBody(error, reason))))) =>
+          log.error(s"$e: $code $error $reason")
+        case Failure(e) =>
+          log.error(s"$e: ${e.getMessage}")
       }
 
     case NewTasks(links) =>

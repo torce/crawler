@@ -31,6 +31,7 @@ class RobotsParserTest extends WordSpecLike with Matchers {
       val robotsFile =
         """User-Agent: Mozilla #Comment
           |#Whole line comment
+          |  #Spaces before comment
           |Disallow: /path #Comment
         """.stripMargin
       val robots = RobotsParser(robotsFile)

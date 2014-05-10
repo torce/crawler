@@ -11,6 +11,7 @@ resolvers ++= Seq(
 scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature")
 
 libraryDependencies ++= Seq(
+  "sprouch" %% "sprouch" %"0.5.11-custom",
   "com.typesafe.akka" %% "akka-contrib" % "2.2.1",
   "com.typesafe.akka" %% "akka-cluster" % "2.2.3",
   "com.typesafe.akka" %% "akka-testkit" % "2.2.3",

@@ -8,6 +8,7 @@ import es.udc.prototype.{Result, Response}
 import spray.http.Uri.Empty
 import spray.http.StatusCodes
 import es.udc.prototype.master.DefaultTask
+import es.udc.prototype.Error
 
 /**
  * User: david
@@ -62,6 +63,13 @@ with BeforeAndAfterAll {
 
       filter ! input
       left.expectMsg(expected)
+    }
+    "send all the error messages to the left" in {
+      val (filter, left, _) = initFilter()
+      val error = new Error(new DefaultTask("unhandled", Empty, 0), new Exception)
+
+      filter ! error
+      left.expectMsg(error)
     }
   }
 }

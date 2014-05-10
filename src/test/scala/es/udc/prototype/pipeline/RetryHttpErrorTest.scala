@@ -5,9 +5,10 @@ import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import scala.collection.JavaConversions._
-import es.udc.prototype.{Request, Response}
+import es.udc.prototype.{Error, Request, Response}
 import spray.http.{StatusCode, Uri}
 import es.udc.prototype.master.DefaultTask
+import spray.http.Uri.Empty
 
 class RetryHttpErrorTest extends TestKit(ActorSystem("test-system", ConfigFactory.load("application.test.conf")))
 with ImplicitSender
@@ -76,6 +77,14 @@ with BeforeAndAfterAll {
           right.send(retry, new Response(task, StatusCode.int2StatusCode(e), Map(), ""))
           left.expectMsg(new Response(task, StatusCode.int2StatusCode(e), Map(), ""))
       }
+    }
+
+    "send all the error messages to the left" in {
+      val (filter, left, _) = initRetry()
+      val error = new Error(new DefaultTask("unhandled", Empty, 0), new Exception)
+
+      filter ! error
+      left.expectMsg(error)
     }
   }
 

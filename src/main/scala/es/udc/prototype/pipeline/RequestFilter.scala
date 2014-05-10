@@ -1,6 +1,6 @@
 package es.udc.prototype.pipeline
 
-import es.udc.prototype.{Response, Request}
+import es.udc.prototype.{Response, Request, Error}
 
 /**
  * User: david
@@ -23,5 +23,7 @@ trait RequestFilter extends Stage {
         case Some(r) => left ! r
         case None =>
       }
+    case error: Error =>
+      left ! error
   }
 }

@@ -5,9 +5,10 @@ import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import es.udc.prototype.master.DefaultTask
-import es.udc.prototype.{Response, Task, Request}
+import es.udc.prototype.{Error, Response, Task, Request}
 import spray.http.{StatusCodes, Uri}
 import scala.concurrent.duration._
+import spray.http.Uri.Empty
 
 class RobotsFilterTest extends TestKit(ActorSystem("test-system", ConfigFactory.load("application.test.conf")))
 with ImplicitSender
@@ -59,7 +60,7 @@ with BeforeAndAfterAll {
             && headers == Map("User-Agent" -> "Mozilla") => Unit
       }
     }
-    "resend the request cached while waiting for robots.txt" in {
+    "resend the request cached while waiting for robots.txt, sending an error for each request denied" in {
       val (robots, left, right) = initRobots()
       val robotsFile =
         """User-Agent: *
@@ -84,7 +85,13 @@ with BeforeAndAfterAll {
           if url == Uri("http://test.com/test")
             && headers == Map("User-Agent" -> "Mozilla") => Unit
       }
+      //The paths denied are sent to the left as an error
+      left.expectMsgPF() {
+        case Error(DefaultTask("id", uri, 0), RobotsPathFiltered("Mozilla"))
+          if uri == Uri("http://test.com/robots.txt") => Unit
+      }
     }
+
     "allow all the requests if there are any errors requesting robots.txt" in {
       val (robots, left, right) = initRobots()
 
@@ -112,7 +119,36 @@ with BeforeAndAfterAll {
             && headers == Map("User-Agent" -> "Mozilla") => Unit
       }
     }
-    "drop the requests not allowed by robots.txt" in {
+
+    "allow all the requests if there are any errors parsing robots.txt" in {
+      val (robots, left, right) = initRobots()
+
+      //Cache all the requests to //test.com
+      left.send(robots, new Request(new DefaultTask("id", Uri("http://test.com/path"), 0), Map("User-Agent" -> "Mozilla")))
+      left.send(robots, new Request(new DefaultTask("id", Uri("http://test.com/test"), 0), Map("User-Agent" -> "Mozilla")))
+
+      //The stage request the robots.txt file
+      right.expectMsgPF() {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://test.com/robots.txt")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+      right.send(robots, new Response(new DefaultTask("id", Uri("http://test.com/robots.txt"), 0), StatusCodes.OK, Map(), "Lorem ipsum"))
+
+      //After parsing a wrong robots.txt file, all the cached responses are sent to the right in order
+      right.expectMsgPF() {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://test.com/path")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+      right.expectMsgPF() {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://test.com/test")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+    }
+
+    "drop the requests not allowed by robots.txt, sending an error to the left" in {
       val (robots, left, right) = initRobots()
       val robotsFile =
         """User-Agent: *
@@ -129,29 +165,27 @@ with BeforeAndAfterAll {
             && headers == Map("User-Agent" -> "Mozilla") => Unit
       }
       right.send(robots, new Response(new DefaultTask("id", Uri("http://test.com/robots.txt"), 0), StatusCodes.OK, Map(), robotsFile))
+      left.expectMsgPF() {
+        case Error(DefaultTask("id", uri, 0), RobotsPathFiltered("Mozilla"))
+          if uri == Uri("http://test.com/robots.txt") => Unit
+      }
       right.expectNoMsg()
     }
+
     "do not modify the responses, even with forbidden paths" in {
       val (robots, left, right) = initRobots()
       val robotsFile =
         """User-Agent: *
           |Disallow: /path
         """.stripMargin
-
-      left.send(robots, new Request(new DefaultTask("id", Uri("http://test.com/path"), 0), Map("User-Agent" -> "Mozilla")))
-
-      //The stage request the robots.txt file
-      right.expectMsgPF() {
-        case Request(Task(_, url, _), headers)
-          if url == Uri("http://test.com/robots.txt")
-            && headers == Map("User-Agent" -> "Mozilla") => Unit
-      }
-      right.send(robots, new Response(new DefaultTask("id", Uri("http://test.com/robots.txt"), 0), StatusCodes.OK, Map(), robotsFile))
-
-      val response = new Response(new DefaultTask("id", Uri("http://test.com/path"), 0), StatusCodes.OK, Map(), robotsFile)
+      val robotsResponse = new Response(new DefaultTask("id", Uri("http://test.com/robots.txt"), 0), StatusCodes.OK, Map(), robotsFile)
+      right.send(robots, robotsResponse)
+      left.expectMsg(robotsResponse)
+      val response = new Response(new DefaultTask("id", Uri("http://test.com/path"), 0), StatusCodes.OK, Map(), "body")
       right.send(robots, response)
       left.expectMsg(response)
     }
+
     "do not modify the robot.txt responses from another stages" in {
       val (robots, left, right) = initRobots()
       val robotsFile =
@@ -162,6 +196,7 @@ with BeforeAndAfterAll {
       right.send(robots, response)
       left.expectMsg(response)
     }
+
     "use the * wildcard if no user agent defined" in {
       val (robots, left, right) = initRobots()
       val robotsFile =
@@ -184,6 +219,14 @@ with BeforeAndAfterAll {
         case Request(Task(_, url, _), _)
           if url == Uri("http://test.com/test") => Unit
       }
+    }
+
+    "send all the error messages to the left" in {
+      val (filter, left, _) = initRobots()
+      val error = new Error(new DefaultTask("unhandled", Empty, 0), new Exception)
+
+      filter ! error
+      left.expectMsg(error)
     }
   }
 

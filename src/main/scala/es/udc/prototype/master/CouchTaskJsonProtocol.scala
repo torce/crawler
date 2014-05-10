@@ -6,16 +6,24 @@ import spray.http.Uri
 import es.udc.prototype.master.Master._
 import es.udc.prototype.master.Master.InProgress
 import es.udc.prototype.master.MasterCouch.{NewCouchTask, RevedCouchTask}
+import java.util.Base64
 
 object CouchTaskJsonProtocol extends DefaultJsonProtocol {
 
+  def encodeId(link: Uri): String = {
+    Base64.getUrlEncoder.encodeToString(link.toString().getBytes)
+  }
+
   implicit object CouchTaskFormat extends RootJsonFormat[RevedCouchTask] {
+    import UriJsonFormat._
+    import TaskStatusJsonFormat._
     def write(t: RevedCouchTask) = {
-      JsObject("_id" -> JsString(t.id),
+      val a = JsObject("_id" -> JsString(encodeId(t.id)),
         "_rev" -> JsString(t.rev),
         "url" -> t.url.toJson,
         "depth" -> JsNumber(t.depth),
         "status" -> t.status.toJson)
+      a
     }
 
     def read(value: JsValue) = {

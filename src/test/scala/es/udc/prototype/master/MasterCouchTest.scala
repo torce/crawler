@@ -102,7 +102,7 @@ with BeforeAndAfterAll {
 
   "A Master actor" should {
     "send a Started message to listener after start" in {
-      system.actorOf(Props(classOf[Master], config, self))
+      system.actorOf(Props(classOf[MasterCouch], config, self))
       expectMsg(msgTimeout, Started)
     }
     "store new tasks" in {
@@ -162,6 +162,8 @@ with BeforeAndAfterAll {
     "send a Finished message to listener when all the tasks are done" in {
       val (master, listener) = initMaster(config)
       val url = Uri("http://task.test")
+
+      listener.expectMsg(msgTimeout, Started)
 
       master ! new NewTasks(Seq(url))
 

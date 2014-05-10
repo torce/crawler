@@ -3,6 +3,7 @@ package es.udc.prototype.crawler
 import akka.actor.{ActorLogging, Actor}
 import spray.http.Uri
 import es.udc.prototype.{Result, Response}
+import java.io.IOException
 
 /**
  * User: david
@@ -24,6 +25,12 @@ trait Crawler extends Actor with ActorLogging {
 
       // The crawler actor must be behind a router
       // The results are sent using the router ActorRef
-      sender.tell(new Result(response.task, extractLinks(response)), context.parent)
+      try {
+        val r = new Result(response.task, extractLinks(response))
+        sender.tell(r, context.parent)
+      } catch {
+        case e: IOException => log.error(s"Wat? $e")
+      }
+
   }
 }
