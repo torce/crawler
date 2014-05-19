@@ -111,8 +111,8 @@ with FSM[ManagerState, ManagerData] {
   }
 
   val fromDownloader: StateFunction = {
-    case Event(response: Response, _) if sender == downloader =>
-      log.debug(s"Forwarding response ${response.task.id} to RequestPipeline")
+    case Event(response@(Response(_, _, _, _) | Error(_, _)), _) if sender == downloader =>
+      log.debug(s"Forwarding ${response.getClass.getName} ${response.asInstanceOf[TaskWrapper].task.id} to RequestPipeline")
       requestPipeline ! new ToLeft(response)
       stay()
   }
@@ -123,8 +123,8 @@ with FSM[ManagerState, ManagerData] {
       downloader ! request
       stay()
 
-    case Event(response: Response, _) if sender == requestPipeline =>
-      log.debug(s"Forwarding response ${response.task.id} to ResultPipeline")
+    case Event(response@(Response(_, _, _, _) | Error(_, _)), _) if sender == requestPipeline =>
+      log.debug(s"Forwarding ${response.getClass.getName} ${response.asInstanceOf[TaskWrapper].task.id} to RequestPipeline")
       resultPipeline ! new ToRight(response)
       stay()
   }
@@ -135,23 +135,16 @@ with FSM[ManagerState, ManagerData] {
       crawler ! response
       stay()
 
-    case Event(result: Result, _) if sender == resultPipeline =>
-      log.debug(s"Forwarding result ${result.task.id} to Master")
+    case Event(result@(Result(_, _) | Error(_, _)), _) if sender == resultPipeline =>
+      log.debug(s"Forwarding ${result.getClass.getName} ${result.asInstanceOf[TaskWrapper].task.id} to ResultPipeline")
       master ! result
       stay()
   }
 
   val fromCrawler: StateFunction = {
-    case Event(result: Result, _) if sender == crawler =>
-      log.debug(s"Forwarding result ${result.task.id} to ResultPipeline")
+    case Event(result@(Result(_, _) | Error(_, _)), _) if sender == crawler =>
+      log.debug(s"Forwarding ${result.getClass.getName} ${result.asInstanceOf[TaskWrapper].task.id} to ResultPipeline")
       resultPipeline ! new ToLeft(result)
-      stay()
-  }
-
-  val errorHandler: StateFunction = {
-    case Event(error: Error, _) =>
-      log.debug(s"Forwarding error of task ${error.task.id} to Master")
-      master ! error
       stay()
   }
 
@@ -182,7 +175,7 @@ with FSM[ManagerState, ManagerData] {
       stay using new ManagerData(tl, downloaderQueue.enqueue(response), rpq, cq)
   }
 
-  when(RequestPipelineActive)(fromMaster orElse fromSelf orElse fromDownloader orElse errorHandler orElse {
+  when(RequestPipelineActive)(fromMaster orElse fromSelf orElse fromDownloader orElse {
     case Event(PipelineStarted, ManagerData(taskList, _, requestPipeQueue, crawlerQueue)) if sender == resultPipeline =>
       requestPipeQueue.foreach(resultPipeline ! new ToRight(_))
       crawlerQueue.foreach(resultPipeline ! new ToLeft(_))
@@ -212,7 +205,7 @@ with FSM[ManagerState, ManagerData] {
       stay using new ManagerData(tl, dq, rpq, crawlerQueue.enqueue(result))
   })
 
-  when(ResultPipelineActive)(fromCrawler orElse fromResultPipeline orElse errorHandler orElse {
+  when(ResultPipelineActive)(fromCrawler orElse fromResultPipeline orElse {
     case Event(PipelineStarted, ManagerData(taskList, downloaderQueue, _, _)) if sender == requestPipeline =>
       downloaderQueue.foreach(requestPipeline ! new ToLeft(_))
 
@@ -237,7 +230,7 @@ with FSM[ManagerState, ManagerData] {
   })
 
   when(Active, stateTimeout = retryTimeout)(fromMaster orElse fromSelf orElse fromDownloader orElse
-    fromRequestPipeline orElse fromResultPipeline orElse fromCrawler orElse errorHandler orElse {
+    fromRequestPipeline orElse fromResultPipeline orElse fromCrawler orElse {
     case Event(StateTimeout, ManagerData(Queue(), _, _, _)) =>
       log.debug(s"Received StateTimeout. Requesting work from Master")
       master ! new PullWork(batchSize)

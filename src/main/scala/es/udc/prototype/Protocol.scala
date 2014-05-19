@@ -16,8 +16,12 @@ case object Started
 
 case object Finished
 
+sealed trait TaskWrapper {
+  def task: Task
+}
+
 //BaseCrawler -> Manager -> Master
-case class Result(task: Task, links: Seq[Uri])
+case class Result(task: Task, links: Seq[Uri]) extends TaskWrapper
 
 //Manager -> Master
 case class PullWork(size: Int)
@@ -26,10 +30,10 @@ case class PullWork(size: Int)
 case class Work(tasks: Seq[Task])
 
 //Manager -> Downloader
-case class Request(task: Task, headers: Map[String, String])
+case class Request(task: Task, headers: Map[String, String]) extends TaskWrapper
 
 //Downloader -> Manager -> BaseCrawler
-case class Response(task: Task, status: StatusCode, headers: Map[String, String], body: String)
+case class Response(task: Task, status: StatusCode, headers: Map[String, String], body: String) extends TaskWrapper
 
 //? -> Master
-case class Error(task: Task, reason: Throwable)
+case class Error(task: Task, reason: Throwable) extends TaskWrapper
