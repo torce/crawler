@@ -1,37 +1,49 @@
 package es.udc.prototype.pipeline
 
-import akka.actor.Actor.Receive
 import scala.collection.mutable.{Map => MMap, Set => MSet, Queue => MQueue}
 import com.typesafe.config.Config
 import es.udc.prototype._
 import spray.http.Uri.{Path, Authority}
-import scala.collection.mutable
-import es.udc.prototype.master.DefaultTask
 import spray.http.{StatusCodes, StatusCode, Uri}
-import akka.actor.ActorLogging
+import akka.actor.{ReceiveTimeout, ActorLogging}
 import es.udc.prototype.Response
 import es.udc.prototype.Request
 import scala.Some
 import es.udc.prototype.master.DefaultTask
+import es.udc.prototype.Error
+import scala.concurrent.duration._
 
 case class RobotsPathFiltered(userAgent: String) extends Exception
 
 class RobotsFilter(config: Config) extends Stage with ActorLogging {
+
+  import context.dispatcher
+
   val robotFiles = MMap[Authority, RobotsParser]()
   val allAllowed = MSet[Authority]()
-  val waiting = MMap[Authority, MQueue[Request]]()
+  val waiting = MMap[Authority, (Long, Request, MSet[Request])]()
+  val retryTimeout = config.getInt("prototype.robots-filter.retry-timeout")
 
   def robotsRequest(url: Uri, headers: Map[String, String]): Request = {
     new Request(new DefaultTask(s"robots.txt-${url.authority}",
       url.withPath(new Path.Slash(new Path.Segment("robots.txt", Path.Empty))), 0), headers)
   }
 
+  case object CheckTimeouts
+
+  override def preStart() {
+    context.system.scheduler.scheduleOnce(retryTimeout.milliseconds, self, CheckTimeouts)
+  }
+
+  //Override postRestart so we don't call preStart and schedule a new message
+  override def postRestart(reason: Throwable) = {}
+
   override def active: Receive = {
     case request@Request(task@Task(_, url, _), headers) =>
       if (allAllowed.contains(url.authority)) {
         right ! request
       } else if (waiting.contains(url.authority)) {
-        waiting.get(url.authority).get.enqueue(request)
+        waiting.get(url.authority).get._3 += request
       } else {
         val userAgent = headers.getOrElse("User-Agent", "*")
         robotFiles.get(url.authority) match {
@@ -42,9 +54,10 @@ class RobotsFilter(config: Config) extends Stage with ActorLogging {
               left ! new Error(task, new RobotsPathFiltered(request.headers.getOrElse("User-Agent", "*")))
             }
           case None =>
-            val queue = MQueue[Request](request)
-            waiting.put(url.authority, queue)
-            right ! robotsRequest(url, headers)
+            val set = MSet[Request](request)
+            val robots = robotsRequest(url, headers)
+            waiting.put(url.authority, (System.currentTimeMillis(), robots, set))
+            right ! robots
         }
       }
 
@@ -54,18 +67,18 @@ class RobotsFilter(config: Config) extends Stage with ActorLogging {
         if (code != StatusCodes.OK) {
           allAllowed += url.authority
           waiting.get(url.authority) match {
-            case Some(queue) =>
-              queue.foreach(right ! _)
+            case Some((_, _, set)) =>
+              set.foreach(right ! _)
               waiting.remove(url.authority) //All the request were sent, clear the entry
-            case None => left ! response
+            case None => left ! response //No waiting request, the robots request comes from another stage
           }
         } else {
           try {
             val parser = RobotsParser(body)
             robotFiles.put(url.authority, parser)
             waiting.get(url.authority) match {
-              case Some(queue) =>
-                val (allow, deny) = queue.partition(
+              case Some((_, _, set)) =>
+                val (allow, deny) = set.partition(
                   r =>
                     parser.allowed(r.headers.getOrElse("User-Agent", "*"), r.task.url))
 
@@ -84,7 +97,26 @@ class RobotsFilter(config: Config) extends Stage with ActorLogging {
       } else {
         left ! response
       }
-    case error: Error =>
-      left ! error
+    case error@Error(Task(_, url, _), _) =>
+      if (url.path.toString().toLowerCase == "/robots.txt" &&
+        (!robotFiles.contains(url.authority) || !allAllowed.contains(url.authority))) {
+        allAllowed += url.authority
+        waiting.get(url.authority) match {
+          case Some((_, _, set)) =>
+            set.foreach(right ! _)
+            waiting.remove(url.authority) //All the request were sent, clear the entry
+          case None => left ! error //No waiting request, the robots request comes from another stage
+        }
+      } else {
+        left ! error
+      }
+    case CheckTimeouts =>
+      waiting.foreach {
+        case (_, (start: Long, robots: Request, _)) =>
+          if (System.currentTimeMillis() - retryTimeout > start) {
+            right ! robots
+          }
+      }
+      context.system.scheduler.scheduleOnce(retryTimeout.milliseconds, self, CheckTimeouts)
   }
 }

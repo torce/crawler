@@ -22,6 +22,9 @@ with BeforeAndAfterAll {
 
   val config = ConfigFactory.load("application.test.conf")
 
+  val msgDelay = 100.milliseconds
+  val retryTimeout = config.getInt("prototype.robots-filter.retry-timeout").milliseconds
+
   def initRobots() = {
     val retry = system.actorOf(Props(classOf[RobotsFilter], config))
     val listener = TestProbe()
@@ -92,7 +95,7 @@ with BeforeAndAfterAll {
       }
     }
 
-    "allow all the requests if there are any errors requesting robots.txt" in {
+    "allow all the requests if the error code is not 200 OK requesting robots.txt" in {
       val (robots, left, right) = initRobots()
 
       //Cache all the requests to //test.com
@@ -107,15 +110,42 @@ with BeforeAndAfterAll {
       }
       right.send(robots, new Response(new DefaultTask("id", Uri("http://test.com/robots.txt"), 0), StatusCodes.NotFound, Map(), ""))
 
-      //After sending an error in robots.txt file, all the cached responses are sent to the right in order
+      //After sending an error in robots.txt file, all the cached responses are sent to the right in any order
       right.expectMsgPF() {
         case Request(Task(_, url, _), headers)
-          if url == Uri("http://test.com/path")
+          if url == Uri("http://test.com/path") || url == Uri("http://test.com/test")
             && headers == Map("User-Agent" -> "Mozilla") => Unit
       }
       right.expectMsgPF() {
         case Request(Task(_, url, _), headers)
-          if url == Uri("http://test.com/test")
+          if url == Uri("http://test.com/path") || url == Uri("http://test.com/test")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+    }
+    "allow all the requests if there are any errors requesting robots.txt" in {
+      val (robots, left, right) = initRobots()
+
+      //Cache all the requests to //test.com
+      left.send(robots, new Request(new DefaultTask("id", Uri("http://test.com/path"), 0), Map("User-Agent" -> "Mozilla")))
+      left.send(robots, new Request(new DefaultTask("id", Uri("http://test.com/test"), 0), Map("User-Agent" -> "Mozilla")))
+
+      //The stage request the robots.txt file
+      right.expectMsgPF() {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://test.com/robots.txt")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+      right.send(robots, new Error(new DefaultTask("id", Uri("http://test.com/robots.txt"), 0), new Exception))
+
+      //After sending an error in robots.txt file, all the cached responses are sent to the right in any order
+      right.expectMsgPF() {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://test.com/path") || url == Uri("http://test.com/test")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+      right.expectMsgPF() {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://test.com/path") || url == Uri("http://test.com/test")
             && headers == Map("User-Agent" -> "Mozilla") => Unit
       }
     }
@@ -135,15 +165,15 @@ with BeforeAndAfterAll {
       }
       right.send(robots, new Response(new DefaultTask("id", Uri("http://test.com/robots.txt"), 0), StatusCodes.OK, Map(), "Lorem ipsum"))
 
-      //After parsing a wrong robots.txt file, all the cached responses are sent to the right in order
+      //After parsing a wrong robots.txt file, all the cached responses are sent to the right in any order
       right.expectMsgPF() {
         case Request(Task(_, url, _), headers)
-          if url == Uri("http://test.com/path")
+          if url == Uri("http://test.com/path") || url == Uri("http://test.com/test")
             && headers == Map("User-Agent" -> "Mozilla") => Unit
       }
       right.expectMsgPF() {
         case Request(Task(_, url, _), headers)
-          if url == Uri("http://test.com/test")
+          if url == Uri("http://test.com/path") || url == Uri("http://test.com/test")
             && headers == Map("User-Agent" -> "Mozilla") => Unit
       }
     }
@@ -228,6 +258,38 @@ with BeforeAndAfterAll {
       filter ! error
       left.expectMsg(error)
     }
-  }
 
+    "restart robots.txt request after a timeout" in {
+      val (robots, left, right) = initRobots()
+      //Cache the request to //test.com
+      left.send(robots, new Request(new DefaultTask("id", Uri("http://test.com/path"), 0), Map("User-Agent" -> "Mozilla")))
+
+      right.expectMsgPF() {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://test.com/robots.txt")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+
+      //Cache the request to //ping.com
+      left.send(robots, new Request(new DefaultTask("id", Uri("http://ping.com/test"), 0), Map("User-Agent" -> "Mozilla")))
+
+      right.expectMsgPF() {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://ping.com/robots.txt")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+
+      //Retry the robots.txt request after a timeout, wait for the second tick plus a delay
+      right.expectMsgPF(2 * retryTimeout + msgDelay) {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://test.com/robots.txt")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+      right.expectMsgPF(2 * retryTimeout + msgDelay) {
+        case Request(Task(_, url, _), headers)
+          if url == Uri("http://ping.com/robots.txt")
+            && headers == Map("User-Agent" -> "Mozilla") => Unit
+      }
+    }
+  }
 }
