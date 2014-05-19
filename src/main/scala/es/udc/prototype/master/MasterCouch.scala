@@ -20,9 +20,7 @@ import scala.concurrent.{Await, Future}
 import CouchTaskJsonProtocol._
 import scala.util.Failure
 import scala.concurrent.duration._
-import akka.remote.transport.ActorTransportAdapter
-import akka.pattern.AskTimeoutException
-import sun.misc.BASE64Encoder
+import scala.language.implicitConversions
 
 trait MasterCouchViews {
   val newTasks = MapReduce(map =
@@ -56,7 +54,18 @@ trait MasterCouchViews {
 
 object MasterCouch {
 
-  class RevedCouchTask(_rev: RevedDocument[NewCouchTask]) extends Task {
+  /*  class SerializableRevedDocument[A](id: String, rev: String, data: A, attachments: Map[String, AttachmentStub])
+      extends RevedDocument[A](id, rev, data, attachments) with Serializable
+
+    implicit def RevedDocument2Serializable[A](rd: RevedDocument[A]): SerializableRevedDocument[A] = {
+      new SerializableRevedDocument[A](rd.id, rd.rev, rd.data, rd.attachments)
+    }
+
+    implicit def Serializable2RevedDocument[A](srd: SerializableRevedDocument[A]): RevedDocument[A] = {
+      new RevedDocument[A](srd.id, srd.rev, srd.data, srd.attachments)
+    }
+  */
+  /*case class RevedCouchTask(_rev: RevedDocument[NewCouchTask]) extends Task {
     def id = _rev.id
 
     def url = _rev.data.url
@@ -68,6 +77,17 @@ object MasterCouch {
     def status = _rev.data.status
 
     def revDoc = _rev
+  }*/
+  case class RevedCouchTask(id: String, rev: String, data: NewCouchTask) extends Task {
+    def this(rd: RevedDocument[NewCouchTask]) = this(rd.id, rd.rev, rd.data)
+
+    def url = data.url
+
+    def status = data.status
+
+    def depth = data.depth
+
+    def revDoc = new RevedDocument(id, rev, data, Map())
   }
 
   case class NewCouchTask(url: Uri, depth: Int, status: TaskStatus)
@@ -121,6 +141,7 @@ class MasterCouch(config: Config, listener: ActorRef) extends Actor with ActorLo
 
   override def preStart() {
     log.info("Sending Started message to the listener")
+    log.info(s"${self.path}")
     listener ! Started
   }
 
@@ -245,30 +266,30 @@ class MasterCouch(config: Config, listener: ActorRef) extends Actor with ActorLo
 
   def receive = {
     case Result(task: RevedCouchTask, links) =>
-      log.info(s"Received Result from ${sender.path} of ${task.id}")
+      log.debug(s"Received Result from ${sender.path} of ${task.id}")
       storeResult(task, links)
     case PullWork(size) =>
       val currentSender = sender
       getTasks(size).onComplete {
         case Success(tasks) =>
           if (tasks.isEmpty) {
-            log.info(s"Received PullWork from manager ${currentSender.path}, no work to send")
+            log.debug(s"Received PullWork from manager ${currentSender.path}, no work to send")
             notifyIfCompleted()
           } else {
-            log.info(s"Received PullWork from manager ${currentSender.path}, sending ${tasks.size} tasks")
+            log.debug(s"Received PullWork from manager ${currentSender.path}, sending ${tasks.size} tasks")
             currentSender ! Work(tasks)
           }
         case Failure(e@SprouchException(ErrorResponse(code, Some(ErrorResponseBody(error, reason))))) =>
-          log.error(s"$e: $code $error $reason")
+          log.warning(s"$e: $code $error $reason")
         case Failure(e) =>
-          log.error(s"$e: ${e.getMessage}")
+          log.warning(s"$e: ${e.getMessage}")
       }
 
     case NewTasks(links) =>
-      log.info(s"Received NewTasks from ${sender.path}: $links")
+      log.debug(s"Received NewTasks from ${sender.path}: $links")
       addNewTasks(links, 0)
     case Error(task: RevedCouchTask, reason: Throwable) =>
-      log.info(s"Received Error of task: ${task.id} from ${sender.path}")
+      log.debug(s"Received Error of task: ${task.id} from ${sender.path}")
       storeError(task, reason)
       notifyIfCompleted()
   }

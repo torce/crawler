@@ -80,7 +80,7 @@ with FSM[ManagerState, ManagerData] {
   val resultPipeline = initResultPipeline(config)
 
   override def preStart() {
-    log.info("Requesting work from Master")
+    log.debug("Requesting work from Master")
     master ! new PullWork(batchSize)
   }
 
@@ -98,7 +98,7 @@ with FSM[ManagerState, ManagerData] {
 
   val fromSelf: StateFunction = {
     case Event(NextTask(task), ManagerData(Queue(), _, _, _)) =>
-      log.info("Task list empty. Requesting more work from Master")
+      log.debug("Task list empty. Requesting more work from Master")
       requestPipeline ! new ToRight(new Request(task, Map()))
       master ! PullWork(batchSize)
       stay using new ManagerData(Queue())
@@ -112,45 +112,45 @@ with FSM[ManagerState, ManagerData] {
 
   val fromDownloader: StateFunction = {
     case Event(response: Response, _) if sender == downloader =>
-      log.info(s"Forwarding response ${response.task.id} to RequestPipeline")
+      log.debug(s"Forwarding response ${response.task.id} to RequestPipeline")
       requestPipeline ! new ToLeft(response)
       stay()
   }
 
   val fromRequestPipeline: StateFunction = {
     case Event(request: Request, _) if sender == requestPipeline =>
-      log.info(s"Forwarding request ${request.task.id} to Downloader")
+      log.debug(s"Forwarding request ${request.task.id} to Downloader")
       downloader ! request
       stay()
 
     case Event(response: Response, _) if sender == requestPipeline =>
-      log.info(s"Forwarding response ${response.task.id} to ResultPipeline")
+      log.debug(s"Forwarding response ${response.task.id} to ResultPipeline")
       resultPipeline ! new ToRight(response)
       stay()
   }
 
   val fromResultPipeline: StateFunction = {
     case Event(response: Response, _) if sender == resultPipeline =>
-      log.info(s"Forwarding response ${response.task.id} to Crawler")
+      log.debug(s"Forwarding response ${response.task.id} to Crawler")
       crawler ! response
       stay()
 
     case Event(result: Result, _) if sender == resultPipeline =>
-      log.info(s"Forwarding result ${result.task.id} to Master")
+      log.debug(s"Forwarding result ${result.task.id} to Master")
       master ! result
       stay()
   }
 
   val fromCrawler: StateFunction = {
     case Event(result: Result, _) if sender == crawler =>
-      log.info(s"Forwarding result ${result.task.id} to ResultPipeline")
+      log.debug(s"Forwarding result ${result.task.id} to ResultPipeline")
       resultPipeline ! new ToLeft(result)
       stay()
   }
 
   val errorHandler: StateFunction = {
     case Event(error: Error, _) =>
-      log.info(s"Forwarding error of task ${error.task.id} to Master")
+      log.debug(s"Forwarding error of task ${error.task.id} to Master")
       master ! error
       stay()
   }
@@ -174,11 +174,11 @@ with FSM[ManagerState, ManagerData] {
       stay using new ManagerData(taskList.enqueue(collection.immutable.Seq(tasks: _*)))
 
     case Event(result: Result, ManagerData(tl, dq, rpq, crawlerQueue)) if sender == crawler =>
-      log.info(s"Storing result ${result.task.id} from Crawler to send at ResultPipeline later")
+      log.debug(s"Storing result ${result.task.id} from Crawler to send at ResultPipeline later")
       stay using new ManagerData(tl, dq, rpq, crawlerQueue.enqueue(result))
 
     case Event(response: Response, ManagerData(tl, downloaderQueue, rpq, cq)) if sender == downloader =>
-      log.info(s"Storing response ${response.task.id} from Downloader to send at RequestPipeline later")
+      log.debug(s"Storing response ${response.task.id} from Downloader to send at RequestPipeline later")
       stay using new ManagerData(tl, downloaderQueue.enqueue(response), rpq, cq)
   }
 
@@ -199,16 +199,16 @@ with FSM[ManagerState, ManagerData] {
       goto(Created)
 
     case Event(request: Request, _) if sender == requestPipeline =>
-      log.info(s"Forwarding request ${request.task.id} to Downloader")
+      log.debug(s"Forwarding request ${request.task.id} to Downloader")
       downloader ! request
       stay()
 
     case Event(response: Response, ManagerData(tl, dq, requestPipeQueue, cq)) if sender == requestPipeline =>
-      log.info(s"Storing response ${response.task.id} from RequestPipeline to send at ResultPipeline later")
+      log.debug(s"Storing response ${response.task.id} from RequestPipeline to send at ResultPipeline later")
       stay using new ManagerData(tl, dq, requestPipeQueue.enqueue(response), cq)
 
     case Event(result: Result, ManagerData(tl, dq, rpq, crawlerQueue)) if sender == crawler =>
-      log.info(s"Storing result ${result.task.id} from Crawler to send at ResultPipeline later")
+      log.debug(s"Storing result ${result.task.id} from Crawler to send at ResultPipeline later")
       stay using new ManagerData(tl, dq, rpq, crawlerQueue.enqueue(result))
   })
 
@@ -228,11 +228,11 @@ with FSM[ManagerState, ManagerData] {
       goto(Created)
 
     case Event(Work(tasks), ManagerData(taskList, _, _, _)) =>
-      log.info(s"Storing tasks $tasks from Master to send at RequestPipeline later")
+      log.debug(s"Storing tasks $tasks from Master to send at RequestPipeline later")
       stay using new ManagerData(taskList.enqueue(collection.immutable.Seq(tasks: _*)))
 
     case Event(response: Response, ManagerData(tl, downloaderQueue, rpq, cq)) if sender == downloader =>
-      log.info(s"Storing response ${response.task.id} from Downloader to send at RequestPipeline later")
+      log.debug(s"Storing response ${response.task.id} from Downloader to send at RequestPipeline later")
       stay using new ManagerData(tl, downloaderQueue.enqueue(response), rpq, cq)
   })
 
@@ -244,11 +244,11 @@ with FSM[ManagerState, ManagerData] {
       stay()
 
     case Event(PipelineRestarting, _) if sender == requestPipeline =>
-      log.info("RequestPipeline is restarting")
+      log.debug("RequestPipeline is restarting")
       goto(ResultPipelineActive)
 
     case Event(PipelineRestarting, _) if sender == resultPipeline =>
-      log.info("ResultPipeline is restarting")
+      log.debug("ResultPipeline is restarting")
       goto(RequestPipelineActive)
   })
 

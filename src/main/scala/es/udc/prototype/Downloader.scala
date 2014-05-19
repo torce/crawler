@@ -29,7 +29,7 @@ class Downloader extends Actor with ActorLogging {
 
   def receive = {
     case Request(task@Task(id, url, _), headers) =>
-      log.info(s"Received Request of $id")
+      log.debug(s"Received Request of $id")
       val currentSender = sender
       val request = Get(url).withHeaders(headers)
       val pipeline = sendReceive
@@ -37,7 +37,7 @@ class Downloader extends Actor with ActorLogging {
         for {
           httpResponse <- pipeline(request)
         } yield {
-          log.info(s"Http Response received of $id")
+          log.debug(s"Http Response received of $id")
           new Response(task, httpResponse.status, httpResponse.headers, httpResponse.entity.asString)
         }
       response.onComplete {

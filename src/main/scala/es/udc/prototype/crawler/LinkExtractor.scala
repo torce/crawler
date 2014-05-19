@@ -17,14 +17,15 @@ class LinkExtractor extends Crawler {
   lazy val parser = XML.withSAXParser(new SAXFactoryImpl().newSAXParser())
 
   override def extractLinks(response: Response) = {
-    if(response.headers("Content-Type").contains("text/html")) {
+    if (response.headers("Content-Type").contains("text/html")) {
       val links = (parser.loadString(response.body) \\ "@href").map(_.text)
       links.flatMap {
         link: String =>
           try {
             if (!link.isEmpty) {
               val url = Uri(link).resolvedAgainst(response.task.url)
-              if (url.effectivePort > 0) { //If the port is defined for the scheme provided
+              if (url.effectivePort > 0) {
+                //If the port is defined for the scheme provided
                 Some(url)
               } else {
                 None
@@ -42,7 +43,5 @@ class LinkExtractor extends Crawler {
     }
   }
 
-  override def extractInformation(response: Response) = {
-    log.info(s"${response.task.url}")
-  }
+  override def extractInformation(response: Response) = Unit
 }
