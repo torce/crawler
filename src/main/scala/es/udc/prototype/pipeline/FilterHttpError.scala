@@ -1,10 +1,12 @@
 package es.udc.prototype.pipeline
 
-import es.udc.prototype.{Response, Request}
+import es.udc.prototype.{Response, Request, Error}
 import com.typesafe.config.Config
 import scala.collection.JavaConversions._
 import spray.http.StatusCode
 import akka.actor.ActorLogging
+
+case class FilteredHttpCode(statusCode: StatusCode) extends Exception
 
 class FilterHttpError(config: Config) extends RequestFilter with ActorLogging {
 
@@ -16,6 +18,7 @@ class FilterHttpError(config: Config) extends RequestFilter with ActorLogging {
   override def handleResponse(response: Response) = {
     if (toFilter.contains(response.status)) {
       log.info(s"Filtering response ${response.task.id} with status ${response.status}")
+      left ! new Error(response.task, new FilteredHttpCode(response.status))
       None
     } else {
       Some(response)

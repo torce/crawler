@@ -123,9 +123,14 @@ with FSM[ManagerState, ManagerData] {
       downloader ! request
       stay()
 
-    case Event(response@(Response(_, _, _, _) | Error(_, _)), _) if sender == requestPipeline =>
-      log.debug(s"Forwarding ${response.getClass.getName} ${response.asInstanceOf[TaskWrapper].task.id} to RequestPipeline")
+    case Event(response: Response, _) if sender == requestPipeline =>
+      log.debug(s"Forwarding Response ${response.task.id} to RequestPipeline")
       resultPipeline ! new ToRight(response)
+      stay()
+
+    case Event(error: Error, _) if sender == requestPipeline =>
+      log.debug(s"Forwarding Error ${error.task.id} to Master")
+      master ! error
       stay()
   }
 

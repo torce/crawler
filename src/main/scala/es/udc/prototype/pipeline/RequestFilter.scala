@@ -12,6 +12,8 @@ trait RequestFilter extends Stage {
 
   def handleResponse(response: Response): Option[Response]
 
+  def handleError(error: Error): Option[Error] = Some(error)
+
   override def active = {
     case request: Request =>
       handleRequest(request) match {
@@ -24,6 +26,9 @@ trait RequestFilter extends Stage {
         case None =>
       }
     case error: Error =>
-      left ! error
+      handleError(error) match {
+        case Some(e) => left ! e
+        case None =>
+      }
   }
 }

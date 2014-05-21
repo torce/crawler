@@ -24,6 +24,10 @@ class MockResultFilter extends ResultFilter {
   override def handleResult(r: Result) = {
     Some(new Result(new DefaultTask("handled", r.task.url, 0), r.links))
   }
+
+  override def handleError(e: Error) = {
+    Some(new Error(new DefaultTask("handled", e.task.url, 0), e.reason))
+  }
 }
 
 class ResultFilterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("application.test.conf")))
@@ -47,7 +51,7 @@ with BeforeAndAfterAll {
     (filter, left, right)
   }
 
-  "A RequestFilter" should {
+  "A ResultFilter" should {
     "apply filter to response and send it to right" in {
       val (filter, _, right) = initFilter()
       val input = new Response(new DefaultTask("unhandled", Empty, 0), StatusCodes.OK, Map(), "body")
@@ -64,12 +68,14 @@ with BeforeAndAfterAll {
       filter ! input
       left.expectMsg(expected)
     }
-    "send all the error messages to the left" in {
+    "apply filter to errors and send it to left" in {
       val (filter, left, _) = initFilter()
       val error = new Error(new DefaultTask("unhandled", Empty, 0), new Exception)
 
       filter ! error
-      left.expectMsg(error)
+      left.expectMsgPF() {
+        case Error(DefaultTask("handled", Empty, 0), _) => Unit
+      }
     }
   }
 }

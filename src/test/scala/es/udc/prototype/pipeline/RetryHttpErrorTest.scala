@@ -9,6 +9,7 @@ import es.udc.prototype.{Error, Request, Response}
 import spray.http.{StatusCode, Uri}
 import es.udc.prototype.master.DefaultTask
 import spray.http.Uri.Empty
+import scala.concurrent.duration._
 
 class RetryHttpErrorTest extends TestKit(ActorSystem("test-system", ConfigFactory.load("application.test.conf")))
 with ImplicitSender
@@ -22,6 +23,7 @@ with BeforeAndAfterAll {
 
   val config = ConfigFactory.load("application.test.conf")
   val errors = config.getIntList("prototype.retry-http-error.errors").toList
+  val maxRetries = config.getInt("prototype.retry-http-error.max-retries")
   val allowed = Seq(500, 403)
 
   def initRetry() = {
@@ -77,6 +79,20 @@ with BeforeAndAfterAll {
           right.send(retry, new Response(task, StatusCode.int2StatusCode(e), Map(), ""))
           left.expectMsg(new Response(task, StatusCode.int2StatusCode(e), Map(), ""))
       }
+    }
+
+    "send a error to the left if the max retries limit is reached" in {
+      val (retry, left, right) = initRetry()
+
+      val task = new DefaultTask("id", Uri.Empty, 0)
+      left.send(retry, new Request(task, Map()))
+      (1 to maxRetries).foreach {
+        _ =>
+          right.send(retry, new Response(task, StatusCode.int2StatusCode(errors(0)), Map(), ""))
+          right.expectMsg(new Request(task, Map()))
+      }
+      right.send(retry, new Response(task, StatusCode.int2StatusCode(errors(0)), Map(), ""))
+      left.expectMsg(new Error(task, HttpErrorMasxRetriesReached))
     }
 
     "send all the error messages to the left" in {

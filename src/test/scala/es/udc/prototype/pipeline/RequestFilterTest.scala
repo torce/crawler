@@ -23,6 +23,10 @@ class MockRequestFilter extends RequestFilter {
   override def handleResponse(r: Response) = {
     Some(new Response(new DefaultTask("handled", r.task.url, 0), StatusCodes.OK, r.headers, r.body))
   }
+
+  override def handleError(e: Error) = {
+    Some(new Error(new DefaultTask("handled", e.task.url, 0), e.reason))
+  }
 }
 
 class RequestFilterTest extends TestKit(ActorSystem("TestSystem", ConfigFactory.load("application.test.conf")))
@@ -63,12 +67,14 @@ with BeforeAndAfterAll {
       filter ! input
       left.expectMsg(expected)
     }
-    "send all the error messages to the left" in {
+    "apply filter to errors and send it to left" in {
       val (filter, left, _) = initFilter()
       val error = new Error(new DefaultTask("unhandled", Empty, 0), new Exception)
 
       filter ! error
-      left.expectMsg(error)
+      left.expectMsgPF() {
+        case Error(DefaultTask("handled", Empty, 0), _) => Unit
+      }
     }
   }
 }

@@ -5,7 +5,7 @@ import akka.actor.{Props, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import scala.collection.JavaConversions._
-import es.udc.prototype.{Request, Response}
+import es.udc.prototype.{Request, Response, Error}
 import spray.http.{StatusCode, Uri}
 import es.udc.prototype.master.DefaultTask
 
@@ -34,10 +34,11 @@ with BeforeAndAfterAll {
   "A FilterHttpError stage" should {
     "filter the configured http errors" in {
       val (httpFilter, listener) = initFilterHttp()
+      val task = new DefaultTask("id", Uri.Empty, 0)
       errors.foreach {
         e =>
-          listener.send(httpFilter, new Response(new DefaultTask("id", Uri.Empty, 0), StatusCode.int2StatusCode(e), Map(), ""))
-          listener.expectNoMsg()
+          listener.send(httpFilter, new Response(task, StatusCode.int2StatusCode(e), Map(), ""))
+          listener.expectMsg(new Error(task, new FilteredHttpCode(StatusCode.int2StatusCode(e))))
       }
     }
     "allow the rest of the error codes" in {

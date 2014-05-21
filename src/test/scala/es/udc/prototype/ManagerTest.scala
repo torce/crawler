@@ -177,12 +177,13 @@ with BeforeAndAfterAll {
       crawler.expectMsg(msg)
     }
     "forward Error messages from downloader to master through the request pipeline" in {
-      val (manager, master, downloader, _, requestPipeline, _) = initManagerActive(CONFIG)
+      val (manager, master, downloader, _, requestPipeline, resultPipeline) = initManagerActive(CONFIG)
       val msg = new Error(new DefaultTask("id", "url", 0), new Exception)
 
       downloader.send(manager, msg)
 
       requestPipeline.expectMsg(ToLeft(msg))
+      resultPipeline.expectNoMsg()
 
       master.expectMsg(new PullWork(BATCH_SIZE)) //The initial work request
       master.expectMsg(msg)
