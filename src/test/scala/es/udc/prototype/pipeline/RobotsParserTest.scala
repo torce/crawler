@@ -85,5 +85,41 @@ class RobotsParserTest extends WordSpecLike with Matchers {
       robots.allowed("Mozilla", Uri("/path")) shouldBe true
       robots.allowed("Opera", Uri("/path")) shouldBe false
     }
+    "disallow all the paths with the wildcard rule" in {
+      val robotsFile =
+        """User-Agent: Mozilla
+          |Disallow: *
+        """.stripMargin
+      val robots = RobotsParser(robotsFile)
+      robots.allowed("Mozilla", Uri("/path")) shouldBe false
+      robots.allowed("Opera", Uri("/path")) shouldBe true
+    }
+    "disallow paths matching with the start wildcard rule" in {
+      val robotsFile =
+        """User-Agent: Mozilla
+          |Disallow: *.png
+        """.stripMargin
+      val robots = RobotsParser(robotsFile)
+      robots.allowed("Mozilla", Uri("/image.png")) shouldBe false
+      robots.allowed("Mozilla", Uri("/image.jpg")) shouldBe true
+    }
+    "disallow paths matching with the end wildcard rule" in {
+      val robotsFile =
+        """User-Agent: Mozilla
+          |Disallow: /path-*
+        """.stripMargin
+      val robots = RobotsParser(robotsFile)
+      robots.allowed("Mozilla", Uri("/path-private")) shouldBe false
+      robots.allowed("Mozilla", Uri("/public-path")) shouldBe true
+    }
+    "disallow paths matching with the start and end wildcard rule" in {
+      val robotsFile =
+        """User-Agent: Mozilla
+          |Disallow: /path-*-private
+        """.stripMargin
+      val robots = RobotsParser(robotsFile)
+      robots.allowed("Mozilla", Uri("/path-this-private")) shouldBe false
+      robots.allowed("Mozilla", Uri("/public-path")) shouldBe true
+    }
   }
 }

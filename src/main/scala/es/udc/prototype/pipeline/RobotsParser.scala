@@ -65,7 +65,18 @@ object RobotsParser {
           status = UserAgentSaw
         } else if (key == "disallow") {
           if (status != Initial) {
-            currentEntry.addRule(new Rule(value))
+            val rulePair = value.split("\\*", 2).toSeq
+            if (rulePair.size == 1) {
+              currentEntry.addRule(new BasicRule(value))
+            } else if (rulePair(0).isEmpty && rulePair(1).isEmpty) {
+              currentEntry.addRule(new WildcardAllRule)
+            } else if (rulePair(0).isEmpty) {
+              currentEntry.addRule(new WildcardEndRule(value.substring(1, value.length)))
+            } else if (rulePair(1).isEmpty) {
+              currentEntry.addRule(new WildcardStartRule(value.substring(0, value.length - 1)))
+            } else {
+              currentEntry.addRule(new WilcardStartEndRule(rulePair(0), rulePair(1)))
+            }
             status = RuleSaw
           }
         }
@@ -120,8 +131,28 @@ class Entry {
   }
 }
 
-class Rule(_path: String) {
+trait Rule {
+  def allowed(path: String): Boolean
+}
+
+class BasicRule(_path: String) extends Rule {
   def allowed(path: String): Boolean = {
-    _path.isEmpty || !(_path == "*" || _path == path || (_path.endsWith("/") && path.startsWith(_path)))
+    _path.isEmpty || !(_path == path || (_path.endsWith("/") && path.startsWith(_path)))
   }
+}
+
+class WildcardAllRule extends Rule {
+  def allowed(path: String): Boolean = false
+}
+
+class WildcardStartRule(_path: String) extends Rule {
+  def allowed(path: String): Boolean = !path.startsWith(_path)
+}
+
+class WildcardEndRule(_path: String) extends Rule {
+  def allowed(path: String): Boolean = !path.endsWith(_path)
+}
+
+class WilcardStartEndRule(_start: String, _end: String) extends Rule {
+  def allowed(path: String): Boolean = !path.startsWith(_start) && !path.endsWith(_end)
 }
