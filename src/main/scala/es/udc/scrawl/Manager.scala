@@ -58,9 +58,9 @@ case object ResultPipelineActive extends ManagerState
 case object Active extends ManagerState
 
 case class ManagerData(taskList: Queue[Task],
-                       downloaderQueue: Queue[Response] = Queue(),
+                       downloaderQueue: Queue[TaskWrapper] = Queue(),
                        requestPipeQueue: Queue[Response] = Queue(),
-                       crawlerQueue: Queue[Result] = Queue())
+                       crawlerQueue: Queue[TaskWrapper] = Queue())
 
 class Manager(config: Config, listener: ActorRef) extends Actor
 with ActorLogging
@@ -171,13 +171,13 @@ with FSM[ManagerState, ManagerData] {
     case Event(Work(tasks), ManagerData(taskList, _, _, _)) =>
       stay using new ManagerData(taskList.enqueue(collection.immutable.Seq(tasks: _*)))
 
-    case Event(result: Result, ManagerData(tl, dq, rpq, crawlerQueue)) if sender == crawler =>
-      log.debug(s"Storing result ${result.task.id} from Crawler to send at ResultPipeline later")
-      stay using new ManagerData(tl, dq, rpq, crawlerQueue.enqueue(result))
+    case Event(result@(Result(_, _) | Error(_, _)), ManagerData(tl, dq, rpq, crawlerQueue)) if sender == crawler =>
+      log.debug(s"Storing result ${result.asInstanceOf[TaskWrapper].task.id} from Crawler to send at ResultPipeline later")
+      stay using new ManagerData(tl, dq, rpq, crawlerQueue.enqueue(result.asInstanceOf[TaskWrapper]))
 
-    case Event(response: Response, ManagerData(tl, downloaderQueue, rpq, cq)) if sender == downloader =>
-      log.debug(s"Storing response ${response.task.id} from Downloader to send at RequestPipeline later")
-      stay using new ManagerData(tl, downloaderQueue.enqueue(response), rpq, cq)
+    case Event(response@(Response(_, _, _, _) | Error(_, _)), ManagerData(tl, downloaderQueue, rpq, cq)) if sender == downloader =>
+      log.debug(s"Storing response ${response.asInstanceOf[TaskWrapper].task.id} from Downloader to send at RequestPipeline later")
+      stay using new ManagerData(tl, downloaderQueue.enqueue(response.asInstanceOf[TaskWrapper]), rpq, cq)
   }
 
   when(RequestPipelineActive)(fromMaster orElse fromSelf orElse fromDownloader orElse {
@@ -205,9 +205,14 @@ with FSM[ManagerState, ManagerData] {
       log.debug(s"Storing response ${response.task.id} from RequestPipeline to send at ResultPipeline later")
       stay using new ManagerData(tl, dq, requestPipeQueue.enqueue(response), cq)
 
-    case Event(result: Result, ManagerData(tl, dq, rpq, crawlerQueue)) if sender == crawler =>
-      log.debug(s"Storing result ${result.task.id} from Crawler to send at ResultPipeline later")
-      stay using new ManagerData(tl, dq, rpq, crawlerQueue.enqueue(result))
+    case Event(error: Error, _) if sender == requestPipeline =>
+      log.debug(s"Forwarding error ${error.task.id} from RequestPipeline to master")
+      master ! error
+      stay()
+
+    case Event(result@(Result(_, _) | Error(_, _)), ManagerData(tl, dq, rpq, crawlerQueue)) if sender == crawler =>
+      log.debug(s"Storing result ${result.asInstanceOf[TaskWrapper].task.id} from Crawler to send at ResultPipeline later")
+      stay using new ManagerData(tl, dq, rpq, crawlerQueue.enqueue(result.asInstanceOf[TaskWrapper]))
   })
 
   when(ResultPipelineActive)(fromCrawler orElse fromResultPipeline orElse {
@@ -229,9 +234,9 @@ with FSM[ManagerState, ManagerData] {
       log.debug(s"Storing tasks $tasks from Master to send at RequestPipeline later")
       stay using new ManagerData(taskList.enqueue(collection.immutable.Seq(tasks: _*)))
 
-    case Event(response: Response, ManagerData(tl, downloaderQueue, rpq, cq)) if sender == downloader =>
-      log.debug(s"Storing response ${response.task.id} from Downloader to send at RequestPipeline later")
-      stay using new ManagerData(tl, downloaderQueue.enqueue(response), rpq, cq)
+    case Event(response@(Response(_, _, _, _) | Error(_, _)), ManagerData(tl, downloaderQueue, rpq, cq)) if sender == downloader =>
+      log.debug(s"Storing response ${response.asInstanceOf[TaskWrapper].task.id} from Downloader to send at RequestPipeline later")
+      stay using new ManagerData(tl, downloaderQueue.enqueue(response.asInstanceOf[TaskWrapper]), rpq, cq)
   })
 
   when(Active, stateTimeout = retryTimeout)(fromMaster orElse fromSelf orElse fromDownloader orElse

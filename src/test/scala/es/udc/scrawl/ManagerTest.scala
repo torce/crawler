@@ -273,6 +273,26 @@ with BeforeAndAfterAll {
       resultPipe.send(manager, PipelineStarted)
       resultPipe.expectMsg(new ToLeft(new Result(task, Seq())))
     }
+    "store errors sent by the downloader" in {
+      val (manager, _, downloader, _, requestPipe, _) = initManagerCreated(CONFIG)
+      val task = new DefaultTask("id", Uri.Empty, 0)
+
+      downloader.send(manager, new Error(task, new Exception))
+      requestPipe.send(manager, PipelineStarted)
+      requestPipe.expectMsgPF() {
+        case ToLeft(Error(`task`, _)) => Unit
+      }
+    }
+    "store errors sent by the crawler" in {
+      val (manager, master, _, crawler, _, resultPipe) = initManagerCreated(CONFIG)
+      val task = new DefaultTask("id", Uri.Empty, 0)
+
+      crawler.send(manager, new Error(task, new Exception))
+      resultPipe.send(manager, PipelineStarted)
+      resultPipe.expectMsgPF() {
+        case ToLeft(Error(`task`, _)) => Unit
+      }
+    }
   }
   "A Manager in ResultPipelineActive state" should {
     "store the work sent by master when the request pipeline is not ready" in {
@@ -292,6 +312,17 @@ with BeforeAndAfterAll {
       downloader.send(manager, new Response(task, StatusCodes.OK, Map(), ""))
       requestPipe.send(manager, PipelineStarted)
       requestPipe.expectMsg(new ToLeft(new Response(task, StatusCodes.OK, Map(), "")))
+    }
+    "store the errors sent by the downloader when the request pipeline is not ready" in {
+      val (manager, _, downloader, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
+      val task = new DefaultTask("id", Uri.Empty, 0)
+      resultPipe.send(manager, PipelineStarted)
+
+      downloader.send(manager, new Error(task, new Exception))
+      requestPipe.send(manager, PipelineStarted)
+      requestPipe.expectMsgPF() {
+        case ToLeft(Error(`task`, _)) => Unit
+      }
     }
   }
   "A Manager in RequestPipelineActive state" should {
@@ -319,6 +350,19 @@ with BeforeAndAfterAll {
       resultPipe.send(manager, PipelineStarted)
       resultPipe.expectMsg(new ToRight(new Response(task, StatusCodes.OK, Map(), "")))
     }
+    "forward the errors sent by the request pipeline to master when the result pipeline is not ready" in {
+      val (manager, master, _, _, requestPipe, resultPipe) = initManagerCreated(CONFIG)
+      val task = new DefaultTask("id", Uri.Empty, 0)
+      requestPipe.send(manager, PipelineStarted)
+
+      requestPipe.send(manager, new Error(task, new Exception))
+      resultPipe.send(manager, PipelineStarted)
+      master.expectMsg(new PullWork(BATCH_SIZE)) //Initial work request
+      master.expectMsgPF() {
+        case Error(`task`, _) => Unit
+      }
+      resultPipe.expectNoMsg()
+    }
     "store the results sent by the crawler when the result pipeline is not ready" in {
       val (manager, _, _, crawler, requestPipe, resultPipe) = initManagerCreated(CONFIG)
       val task = new DefaultTask("id", Uri.Empty, 0)
@@ -327,6 +371,17 @@ with BeforeAndAfterAll {
       crawler.send(manager, new Result(task, Seq()))
       resultPipe.send(manager, PipelineStarted)
       resultPipe.expectMsg(new ToLeft(new Result(task, Seq())))
+    }
+    "store the errors sent by the crawler when the result pipeline is not ready" in {
+      val (manager, _, _, crawler, requestPipe, resultPipe) = initManagerCreated(CONFIG)
+      val task = new DefaultTask("id", Uri.Empty, 0)
+      requestPipe.send(manager, PipelineStarted)
+
+      crawler.send(manager, new Error(task, new Exception))
+      resultPipe.send(manager, PipelineStarted)
+      resultPipe.expectMsgPF() {
+        case ToLeft(Error(`task`, _)) => Unit
+      }
     }
   }
   "A Manager in Active state" should {
