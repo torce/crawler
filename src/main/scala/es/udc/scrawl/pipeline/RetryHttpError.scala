@@ -46,4 +46,11 @@ class RetryHttpError(config: Config) extends RequestFilter with ActorLogging {
       Some(response)
     }
   }
+
+  override def handleError(error: Error) = {
+    if (requests.contains(error.task.id)) {
+      requests.remove(error.task.id)
+    }
+    Some(error)
+  }
 }

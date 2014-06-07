@@ -95,6 +95,20 @@ with BeforeAndAfterAll {
       left.expectMsg(new Error(task, HttpErrorMasxRetriesReached))
     }
 
+    "remove the cached request if a Error message is received for that request" in {
+      val (retry, left, right) = initRetry()
+
+      val task = new DefaultTask("id", Uri.Empty, 0)
+      left.send(retry, new Request(task, Map()))
+      val error = new Error(task, new Exception)
+      right.send(retry, error)
+      left.expectMsg(error)
+
+      //The request has been removed, this response has not a associated request
+      right.send(retry, new Response(task, StatusCode.int2StatusCode(errors(0)), Map(), ""))
+      left.expectNoMsg() //Unknown responses are dropped
+    }
+
     "send all the error messages to the left" in {
       val (filter, left, _) = initRetry()
       val error = new Error(new DefaultTask("unhandled", Empty, 0), new Exception)
