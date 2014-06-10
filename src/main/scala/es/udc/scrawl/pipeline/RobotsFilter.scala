@@ -29,6 +29,13 @@ class RobotsFilter(config: Config) extends Stage with ActorLogging {
       url.withPath(new Path.Slash(new Path.Segment("robots.txt", Path.Empty))), 0), headers)
   }
 
+  def isRobotsTask(task: Task): Boolean = task match {
+    case DefaultTask(id, url, _)
+      if id == s"robots.txt-${url.authority}" &&
+        url.path.toString() == "/robots.txt" => true
+    case _ => false
+  }
+
   case object CheckTimeouts
 
   override def preStart() {
@@ -63,7 +70,7 @@ class RobotsFilter(config: Config) extends Stage with ActorLogging {
 
     case response@Response(task@Task(_, url, _), code, headers, body) =>
       if (url.path.toString().toLowerCase == "/robots.txt" &&
-        (!robotFiles.contains(url.authority) || !allAllowed.contains(url.authority))) {
+        !robotFiles.contains(url.authority) && !allAllowed.contains(url.authority)) {
         if (code != StatusCodes.OK) {
           allAllowed += url.authority
           waiting.get(url.authority) match {
@@ -83,7 +90,8 @@ class RobotsFilter(config: Config) extends Stage with ActorLogging {
                     parser.allowed(r.headers.getOrElse("User-Agent", "*"), r.task.url))
 
                 allow.foreach(right ! _)
-                deny.foreach(r => left ! new Error(task, new RobotsPathFiltered(r.headers.getOrElse("User-Agent", "*"))))
+                deny.foreach(r =>
+                  left ! new Error(task, new RobotsPathFiltered(r.headers.getOrElse("User-Agent", "*"))))
 
                 waiting.remove(url.authority) //All the request were sent, clear the entry
               case None => left ! response
@@ -95,11 +103,13 @@ class RobotsFilter(config: Config) extends Stage with ActorLogging {
           }
         }
       } else {
-        left ! response
+        if (!isRobotsTask(task)) {
+          left ! response
+        }
       }
-    case error@Error(Task(_, url, _), _) =>
+    case error@Error(task@Task(_, url, _), _) =>
       if (url.path.toString().toLowerCase == "/robots.txt" &&
-        (!robotFiles.contains(url.authority) || !allAllowed.contains(url.authority))) {
+        !robotFiles.contains(url.authority) && !allAllowed.contains(url.authority)) {
         allAllowed += url.authority
         waiting.get(url.authority) match {
           case Some((_, _, set)) =>
@@ -108,7 +118,9 @@ class RobotsFilter(config: Config) extends Stage with ActorLogging {
           case None => left ! error //No waiting request, the robots request comes from another stage
         }
       } else {
-        left ! error
+        if (!isRobotsTask(task)) {
+          left ! error
+        }
       }
     case CheckTimeouts =>
       waiting.foreach {

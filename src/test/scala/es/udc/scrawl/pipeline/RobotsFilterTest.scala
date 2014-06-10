@@ -291,5 +291,33 @@ with BeforeAndAfterAll {
             && headers == Map("User-Agent" -> "Mozilla") => Unit
       }
     }
+
+    "filter the robot.txt request sent by the stage if the stage has already a robots.txt" in {
+      val (robots, left, right) = initRobots()
+      val robotsFile =
+        """User-Agent: *
+          |Disallow:
+        """.stripMargin
+      //Cache the request to //test.com
+      left.send(robots, new Request(new DefaultTask("id", Uri("http://test.com/path"), 0), Map("User-Agent" -> "Mozilla")))
+
+      val robotsRequest = right.expectMsgPF() {
+        case request@Request(Task(_, url, _), headers)
+          if url == Uri("http://test.com/robots.txt")
+            && headers == Map("User-Agent" -> "Mozilla") => request
+      }
+
+      //The stage will send another robots.txt request after the reception of this request
+      left.send(robots, new Request(new DefaultTask("id", Uri("http://test.com/ping"), 0), Map("User-Agent" -> "Mozilla")))
+
+      //The first robots.txt will be parsed and stored
+      val robotsResponse = new Response(robotsRequest.task, StatusCodes.OK, Map(), robotsFile)
+      right.send(robots, robotsResponse)
+      left.expectNoMsg()
+
+      //The second one must be filtered
+      right.send(robots, robotsResponse)
+      left.expectNoMsg()
+    }
   }
 }
